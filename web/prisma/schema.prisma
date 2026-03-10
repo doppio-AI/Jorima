@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model usuario {
+  usuario_id            Int              @id @default(autoincrement())
+  tipo_usuario          Int              @db.SmallInt
+  correo                String           @unique @db.VarChar(150)
+  nombre                String           @db.VarChar(100)
+  apellido_paterno      String           @db.VarChar(100)
+  apellido_materno      String           @db.VarChar(100)
+  contrasena            String           @db.VarChar(100)
+  edificio              String           @db.VarChar(50)
+  turno                 String           @db.VarChar(15)
+  fecha_registro        DateTime?        @default(now()) @db.Timestamp(6)
+  encuesta              encuesta[]
+  seguimientos_personal seguimiento_rh[] @relation("seguimiento_rh_personal_idTousuario")
+  seguimientos_rh       seguimiento_rh[] @relation("seguimiento_rh_rh_idTousuario")
+
+  @@index([correo], map: "idx_usuario_correo")
+}
+
+model encuesta {
+  encuesta_id    Int       @id @default(autoincrement())
+  titulo         String    @db.VarChar(150)
+  descripcion    String?
+  edificio       String    @db.VarChar(50)
+  turno          String    @db.VarChar(15)
+  creador_id     Int
+  fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
+  usuario        usuario   @relation(fields: [creador_id], references: [usuario_id], onDelete: Cascade, map: "fk_creador_encuesta")
+
+  @@index([creador_id], map: "idx_encuesta_creador")
+}
+
+model seguimiento_rh {
+  seguimiento_id   Int                     @id @default(autoincrement())
+  personal_id      Int
+  rh_id            Int
+  fecha_cita       DateTime?               @db.Timestamp(6)
+  nivel_urgencia   String                  @db.VarChar(10)
+  tipo_seguimiento String                  @db.VarChar(15)
+  estado           String                  @default("Pendiente") @db.VarChar(15)
+  notas            String?
+  fecha_registro   DateTime?               @default(now()) @db.Timestamp(6)
+  ruta             String
+  archivos         archivo_seguimiento[]
+  historial        historial_seguimiento[]
+  usuario_personal usuario                 @relation("seguimiento_rh_personal_idTousuario", fields: [personal_id], references: [usuario_id], onDelete: Cascade, map: "fk_personal_seguimiento")
+  usuario_rh       usuario                 @relation("seguimiento_rh_rh_idTousuario", fields: [rh_id], references: [usuario_id], onDelete: Cascade, map: "fk_rh_seguimiento")
+
+  @@index([personal_id], map: "idx_seguimiento_personal")
+  @@index([rh_id], map: "idx_seguimiento_rh")
+}
+
+model historial_seguimiento {
+  historial_id    Int            @id @default(autoincrement())
+  seguimiento_id  Int
+  estado_anterior String?        @db.VarChar(15)
+  estado_nuevo    String?        @db.VarChar(15)
+  fecha_cambio    DateTime?      @default(now()) @db.Timestamp(6)
+  seguimiento_rh  seguimiento_rh @relation(fields: [seguimiento_id], references: [seguimiento_id], onDelete: Cascade, map: "fk_historial_seguimiento")
+
+  @@index([seguimiento_id], map: "idx_historial_seguimiento")
+}
+
+model archivo_seguimiento {
+  id             Int            @id @default(autoincrement())
+  nombre         String         @db.VarChar(150)
+  hash           String         @db.VarChar(150)
+  fecha_subida   DateTime       @default(now())
+  seguimiento_id Int
+  seguimiento_rh seguimiento_rh @relation(fields: [seguimiento_id], references: [seguimiento_id], onDelete: Cascade)
+
+  @@index([seguimiento_id], map: "idx_archivo_seguimiento")
+}
