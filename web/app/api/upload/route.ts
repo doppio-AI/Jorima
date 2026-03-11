@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import crypto from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
@@ -18,14 +17,15 @@ export async function POST(request: Request) {
     const tipo_seguimiento = formData.get("tipo_seguimiento") as string;
     const notas = (formData.get("notas") as string) || "";
 
-    if (!file || !usuario_id || !personal_id) {
+    // Validar datos
+    if (!file || typeof file === "string" || !usuario_id || !personal_id) {
       return NextResponse.json(
         { error: "Datos incompletos" },
         { status: 400 }
       );
     }
 
-    // verificar RH
+    // Verificar que el usuario sea RH
     const usuario = await prisma.usuario.findUnique({
       where: { usuario_id }
     });
@@ -37,38 +37,60 @@ export async function POST(request: Request) {
       );
     }
 
+    // Convertir archivo a buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const uploadDir = path.join(process.cwd(), "uploads");
-    await fs.mkdir(uploadDir, { recursive: true });
-
-    const uniqueName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(uploadDir, uniqueName);
-
-    await fs.writeFile(filePath, buffer);
-
+    // Generar hash SHA256 del archivo
     const hash = crypto
       .createHash("sha256")
       .update(buffer)
       .digest("hex");
 
-    const data: Prisma.seguimiento_rhUncheckedCreateInput = {
-      personal_id: personal_id,
-      rh_id: usuario_id,
-      nivel_urgencia: nivel_urgencia as any,
-      tipo_seguimiento: tipo_seguimiento as any,
-      estado: "Pendiente",
-      notas: notas,
-      ruta: filePath   
-    };
+    // Obtener extensión del archivo
+    const ext = path.extname(file.name);
 
+    // Usar hash como nombre del archivo
+    const fileName = `${hash}${ext}`;
+
+    // Crear carpeta uploads si no existe
+    const uploadDir = path.join(process.cwd(), "uploads");
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    const filePath = path.join(uploadDir, fileName);
+
+    // Guardar archivo SOLO si no existe (evita duplicados)
+    try {
+      await fs.access(filePath);
+    } catch {
+      await fs.writeFile(filePath, buffer);
+    }
+
+    // Ruta relativa para la BD
+    const relativePath = `/uploads/${fileName}`;
+
+    // Crear seguimiento
     const seguimiento = await prisma.seguimiento_rh.create({
-      data
+      data: {
+        nivel_urgencia: nivel_urgencia,
+        tipo_seguimiento: tipo_seguimiento,
+        estado: "Pendiente",
+        notas: notas,
+        ruta: relativePath,
+
+        usuario_personal: {
+          connect: { usuario_id: personal_id }
+        },
+
+        usuario_rh: {
+          connect: { usuario_id: usuario_id }
+        }
+      }
     });
 
+    // Registrar archivo
     const archivo = await prisma.archivo_seguimiento.create({
       data: {
-        nombre: uniqueName,
+        nombre: fileName,
         hash: hash,
         seguimiento_id: seguimiento.seguimiento_id
       }
@@ -83,11 +105,12 @@ export async function POST(request: Request) {
 
   } catch (error) {
 
-    console.error(error);
+    console.error("UPLOAD ERROR:", error);
 
     return NextResponse.json(
       { error: "Error al subir archivo" },
       { status: 500 }
     );
+
   }
 }

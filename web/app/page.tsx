@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import CryptoJS from "crypto-js";
 import JSEncrypt from "jsencrypt";
-import "./globals.css";
 
 export default function Login() {
 
@@ -35,36 +34,32 @@ export default function Login() {
 
   }, []);
 
+  /* ======================
+     LOGIN
+  ====================== */
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
 
     e.preventDefault();
 
     try {
 
-      /* ======================
-         AES KEY
-      ====================== */
+      /* AES KEY */
 
       const aesKey = CryptoJS.lib.WordArray.random(32);
-
       const iv = CryptoJS.lib.WordArray.random(16);
 
       console.log("🔑 AES KEY:", aesKey.toString());
-
       console.log("🧪 IV:", iv.toString());
 
-      /* ======================
-         PAYLOAD
-      ====================== */
+      /* PAYLOAD */
 
       const payload = JSON.stringify({
         correo: form.correo,
         contrasena: form.contrasena
       });
 
-      /* ======================
-         AES ENCRYPT
-      ====================== */
+      /* CIFRAR DATOS */
 
       const encryptedData = CryptoJS.AES.encrypt(
         payload,
@@ -78,9 +73,7 @@ export default function Login() {
 
       console.log("📦 DATA CIFRADA:", encryptedData);
 
-      /* ======================
-         RSA ENCRYPT AES KEY
-      ====================== */
+      /* CIFRAR AES CON RSA */
 
       const rsa = new JSEncrypt();
 
@@ -91,12 +84,9 @@ export default function Login() {
       const encryptedKey = rsa.encrypt(aesKeyHex);
 
       console.log("🔐 AES KEY HEX:", aesKeyHex);
-
       console.log("🔐 RSA RESULT:", encryptedKey);
 
       if (!encryptedKey) {
-
-        console.error("❌ RSA encryption failed");
 
         alert("Error cifrando clave RSA");
 
@@ -104,9 +94,7 @@ export default function Login() {
 
       }
 
-      /* ======================
-         SEND
-      ====================== */
+      /* ENVIAR LOGIN */
 
       const res = await fetch("/api/login", {
 
@@ -119,9 +107,7 @@ export default function Login() {
         body: JSON.stringify({
 
           encryptedData,
-
           encryptedKey,
-
           iv: CryptoJS.enc.Base64.stringify(iv)
 
         })
@@ -130,21 +116,30 @@ export default function Login() {
 
       const data = await res.json();
 
-      console.log("📨 RESPUESTA:", data);
+      console.log("RESPUESTA:", data);
 
       if (res.ok) {
+
+        /* guardar usuario */
+
+        localStorage.setItem(
+          "usuario",
+          JSON.stringify(data.usuario)
+        );
+
+        /* redirigir dashboard */
 
         router.push("/usuarios");
 
       } else {
 
-        alert(data.error);
+        alert(data.error || "Credenciales incorrectas");
 
       }
 
     } catch (error) {
 
-      console.error("❌ ERROR LOGIN:", error);
+      console.error("ERROR LOGIN:", error);
 
       alert("Error al iniciar sesión");
 

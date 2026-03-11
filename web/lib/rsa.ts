@@ -1,33 +1,29 @@
 import crypto from "crypto";
 
-let publicKey: string;
-let privateKey: string;
+let keys: any = null;
 
 export function getKeys() {
 
-  if (!publicKey || !privateKey) {
+  if (!keys) {
 
-    console.log("🔐 Generando claves RSA...");
+    keys = crypto.generateKeyPairSync("rsa", {
 
-    const keys = crypto.generateKeyPairSync("rsa", {
       modulusLength: 2048,
+
       publicKeyEncoding: {
-        type: "spki",
+        type: "pkcs1",
         format: "pem"
       },
+
       privateKeyEncoding: {
-        type: "pkcs8",
+        type: "pkcs1",
         format: "pem"
       }
+
     });
-
-    publicKey = keys.publicKey;
-    privateKey = keys.privateKey;
-
-    console.log("✅ PUBLIC KEY GENERADA");
-    console.log(publicKey);
 
   }
 
-  return { publicKey, privateKey };
+  return keys;
+
 }

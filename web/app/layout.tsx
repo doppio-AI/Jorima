@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
 import "./globals.css";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Jorima",
-  description: "Plataforma de Bienestar Laboral",
+  description: "Plataforma de bienestar",
 };
 
 export default function RootLayout({
@@ -13,9 +12,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body>
-        {children}
-      </body>
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://cdn.lineicons.com/4.0/lineicons.css"
+        />
+      </head>
+
+      <body>{children}</body>
     </html>
   );
 }
