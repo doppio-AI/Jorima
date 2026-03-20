@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
 
       message: "Login exitoso",
 
@@ -92,6 +92,26 @@ export async function POST(request: Request) {
 
     });
 
+    response.cookies.set("usuario", JSON.stringify({
+      id: user.usuario_id,
+      tipo_usuario: user.tipo_usuario
+    }), {
+      httpOnly: true,
+      path: "/",
+      maxAge: 60 * 60 * 24
+    });
+
+    response.cookies.set("usuario_public", encodeURIComponent(JSON.stringify({
+      id: user.usuario_id,
+      tipo_usuario: user.tipo_usuario
+    })), {
+      httpOnly: false,
+      path: "/",
+      maxAge: 60 * 60 * 24
+    });
+
+    return response;
+
   } catch (error) {
 
     console.error("LOGIN ERROR:", error);
@@ -103,4 +123,21 @@ export async function POST(request: Request) {
 
   }
 
+}
+
+export async function DELETE() {
+  const response = NextResponse.json({ message: "Logout exitoso" });
+
+  response.cookies.set("usuario", "", {
+    httpOnly: true,
+    path: "/",
+    expires: new Date(0)
+  });
+
+  response.cookies.set("usuario_public", "", {
+    path: "/",
+    expires: new Date(0)
+  });
+
+  return response;
 }
