@@ -21,17 +21,11 @@ export default function Login() {
   ====================== */
 
   useEffect(() => {
-
     fetch("/api/public-key")
       .then(res => res.json())
       .then(data => {
-
-        console.log("🔑 PUBLIC KEY RECIBIDA");
-
         setPublicKey(data.publicKey);
-
       });
-
   }, []);
 
   /* ======================
@@ -45,15 +39,10 @@ export default function Login() {
     try {
 
       /* AES KEY */
-
       const aesKey = CryptoJS.lib.WordArray.random(32);
       const iv = CryptoJS.lib.WordArray.random(16);
 
-      console.log("🔑 AES KEY:", aesKey.toString());
-      console.log("🧪 IV:", iv.toString());
-
       /* PAYLOAD */
-
       const payload = JSON.stringify({
         correo: form.correo,
         contrasena: form.contrasena
@@ -71,8 +60,6 @@ export default function Login() {
         }
       ).ciphertext.toString(CryptoJS.enc.Base64);
 
-      console.log("📦 DATA CIFRADA:", encryptedData);
-
       /* CIFRAR AES CON RSA */
 
       const rsa = new JSEncrypt();
@@ -82,9 +69,6 @@ export default function Login() {
       const aesKeyHex = aesKey.toString(CryptoJS.enc.Hex);
 
       const encryptedKey = rsa.encrypt(aesKeyHex);
-
-      console.log("🔐 AES KEY HEX:", aesKeyHex);
-      console.log("🔐 RSA RESULT:", encryptedKey);
 
       if (!encryptedKey) {
 
@@ -116,20 +100,21 @@ export default function Login() {
 
       const data = await res.json();
 
-      console.log("RESPUESTA:", data);
-
       if (res.ok) {
 
-        /* guardar usuario */
+        /* guardar usuario en cookie pública */
 
-        localStorage.setItem(
-          "usuario",
+        document.cookie = `usuario_public=${encodeURIComponent(
           JSON.stringify(data.usuario)
-        );
+        )}; path=/; max-age=86400`;
 
         /* redirigir dashboard */
 
-        router.push("/usuarios");
+        if (Number(data.usuario.tipo_usuario) === 1) {
+          router.push("/administrador");
+        } else {
+          router.push("/usuarios");
+        }
 
       } else {
 
@@ -138,14 +123,12 @@ export default function Login() {
       }
 
     } catch (error) {
-
-      console.error("ERROR LOGIN:", error);
-
       alert("Error al iniciar sesión");
-
     }
 
   };
+
+
 
   return (
 

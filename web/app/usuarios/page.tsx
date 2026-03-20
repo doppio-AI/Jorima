@@ -49,19 +49,19 @@ export default function UsuariosPage() {
     switch (mood) {
 
       case "muy mal":
-        return <FiFrown size={18} />;
+        return <FiFrown size={180} />;
 
       case "mal":
-        return <FiFrown size={18} />;
+        return <FiFrown size={180} />;
 
       case "regular":
-        return <FiMeh size={18} />;
+        return <FiMeh size={180} />;
 
       case "bien":
-        return <FiSmile size={18} />;
+        return <FiSmile size={180} />;
 
       case "muy bien":
-        return <FiSmile size={18} />;
+        return <FiSmile size={180} />;
 
       default:
         return <FiSmile size={18} />;
@@ -74,17 +74,46 @@ export default function UsuariosPage() {
      VALIDAR SESIÓN
   ========================= */
 
+  const readCookie = (name: string) => {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
   useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const usuarioPublicValue = readCookie("usuario_public");
 
-    const user = localStorage.getItem("usuario");
+        if (!usuarioPublicValue) {
+          router.push("/");
+          return;
+        }
 
-    if (!user) {
-      router.push("/");
-      return;
-    }
+        const usuarioPublic = JSON.parse(usuarioPublicValue);
 
-    setUsuario(JSON.parse(user));
+        if (!usuarioPublic?.id) {
+          router.push("/");
+          return;
+        }
 
+        const res = await fetch(`/api/usuarios/${usuarioPublic.id}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          router.push("/");
+          return;
+        }
+
+        const data = await res.json();
+        setUsuario({ nombre: data.nombre, correo: data.correo });
+      } catch (error) {
+        router.push("/");
+      }
+    };
+
+    checkSession();
   }, [router]);
 
   /* =========================
@@ -113,12 +142,18 @@ export default function UsuariosPage() {
      LOGOUT
   ========================= */
 
-  const logout = () => {
+const logout = async () => {
+  try {
+    await fetch("/api/login", {
+      method: "DELETE"
+    });
 
-    localStorage.removeItem("usuario");
-    router.push("/");
-
-  };
+    document.cookie = "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    window.location.href = "/";
+  } catch (error) {
+    window.location.href = "/";
+  }
+};
 
   return (
 
