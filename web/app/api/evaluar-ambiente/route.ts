@@ -14,7 +14,7 @@ export async function GET() {
   // convertir booleano a número
   const atendido = siendo_atendido ? 1 : 0;
 
-  // 🔥 crecimiento exponencial controlado
+  // crecimiento exponencial controlado
   const k = 0.4; // controla qué tan rápido crece
   const negativas_transformadas = Math.exp(k * respuestas_negativas);
 
