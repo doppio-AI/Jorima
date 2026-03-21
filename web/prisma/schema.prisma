@@ -8,19 +8,19 @@ datasource db {
 }
 
 model usuario {
-  usuario_id       Int              @id @default(autoincrement())
+  usuario_id       Int            @id @default(autoincrement())
   tipo_usuario     Int
-  correo           String           @unique @db.VarChar(150)
-  nombre           String           @db.VarChar(100)
-  apellido_paterno String           @db.VarChar(100)
-  apellido_materno String?          @db.VarChar(100)
+  correo           String         @unique @db.VarChar(150)
+  nombre           String         @db.VarChar(100)
+  apellido_paterno String         @db.VarChar(100)
+  apellido_materno String?        @db.VarChar(100)
   contrasena       String
   edificio_id      Int
-  turno            String?          @db.VarChar(50)
-  fecha_registro   DateTime?        @default(now()) @db.Timestamp(6)
-  encuesta         encuesta[]
+  turno            String?        @db.VarChar(50)
+  fecha_registro   DateTime?      @default(now()) @db.Timestamp(6)
   conversacion     conversacion[]
-  edificio         edificio         @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuario_edificio")
+  encuesta         encuesta[]
+  edificio         edificio       @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuario_edificio")
 
   @@index([edificio_id], map: "idx_usuario_edificio")
 }
@@ -58,24 +58,24 @@ model respuesta {
 }
 
 model conversacion {
-  conversacion_id Int        @id @default(autoincrement())
+  conversacion_id Int       @id @default(autoincrement())
   usuario_id      Int
-  titulo          String?    @db.VarChar(200)
-  fecha_creacion  DateTime?  @default(now()) @db.Timestamp(6)
-  activa          Boolean    @default(true)
-  usuario         usuario    @relation(fields: [usuario_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
+  titulo          String?   @db.VarChar(200)
+  fecha_creacion  DateTime? @default(now()) @db.Timestamp(6)
+  activa          Boolean   @default(true)
+  usuario         usuario   @relation(fields: [usuario_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
   mensaje         mensaje[]
 
   @@index([usuario_id], map: "idx_conversacion_usuario")
 }
 
 model mensaje {
-  mensaje_id      Int           @id @default(autoincrement())
+  mensaje_id      Int          @id @default(autoincrement())
   conversacion_id Int
-  role            String        @db.VarChar(20)
+  role            String       @db.VarChar(20)
   texto           String
-  fecha           DateTime?     @default(now()) @db.Timestamp(6)
-  conversacion    conversacion  @relation(fields: [conversacion_id], references: [conversacion_id], onDelete: Cascade, onUpdate: NoAction)
+  fecha           DateTime?    @default(now()) @db.Timestamp(6)
+  conversacion    conversacion @relation(fields: [conversacion_id], references: [conversacion_id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([conversacion_id], map: "idx_mensaje_conversacion")
 }
