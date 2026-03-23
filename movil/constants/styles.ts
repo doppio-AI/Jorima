@@ -1,9 +1,7 @@
-// constants/styles.ts
-import { StyleSheet } from 'react-native';
-import { COLORS, SIZES } from './theme';
+import { StyleSheet } from "react-native";
+import { COLORS, SIZES } from "./theme";
 
 export const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -19,9 +17,9 @@ export const styles = StyleSheet.create({
 
   title: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: COLORS.text,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 10,
   },
 
@@ -42,8 +40,7 @@ export const styles = StyleSheet.create({
 
   buttonText: {
     color: COLORS.white,
-    textAlign: 'center',
-    fontWeight: 'bold',
+    textAlign: "center",
+    fontWeight: "bold",
   },
-
 });

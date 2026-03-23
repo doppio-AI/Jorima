@@ -1,29 +1,36 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
-import { Platform } from 'react-native';
-
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+import Colors from "./colors";
+import Spacing from "./spacing";
+import Radius from "./radius";
+import Typography from "./typography";
 
 export const COLORS = {
-  primary: '#2e8b7f',
-  primaryDark: '#256f65',
-  background: '#f4f6f8',
-  white: '#ffffff',
-  gray: '#9e9e9e',
-  lightGray: '#e0e0e0',
-  text: '#333333',
+  ...Colors,
 };
 
 export const SIZES = {
-  padding: 20,
-  radius: 12,
+  padding: Spacing.md,
+  radius: Radius.md,
+  base: Spacing.sm,
+  small: Spacing.sm,
+  medium: Spacing.md,
+  large: Spacing.lg,
+  xl: Spacing.xl,
 };
 
 export const FONTS = {
-  regular: 'System',
-  bold: 'System',
+  h1: Typography.h1,
+  h2: Typography.h2,
+  h3: Typography.h3,
+  body: Typography.body,
+  bodySmall: Typography.bodySmall,
+  button: Typography.button,
+  caption: Typography.caption,
 };
+
+const Theme = {
+  COLORS,
+  SIZES,
+  FONTS,
+};
+
+export default Theme;
