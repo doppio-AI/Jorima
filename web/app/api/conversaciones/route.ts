@@ -3,14 +3,14 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const edificios = await prisma.edificio.findMany({
-      include: { usuario: true, encuesta: true },
+    const conversaciones = await prisma.conversacion.findMany({
+      include: { usuario: true, mensaje: true },
     });
-    return NextResponse.json(edificios);
+    return NextResponse.json(conversaciones);
   } catch (error: unknown) {
     const mensaje = error instanceof Error ? error.message : "Error desconocido";
     return NextResponse.json(
-      { error: "Error al obtener edificios", detalle: mensaje },
+      { error: "Error al obtener conversaciones", detalle: mensaje },
       { status: 500 }
     );
   }
@@ -19,17 +19,18 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const nuevo = await prisma.edificio.create({
+    const nueva = await prisma.conversacion.create({
       data: {
-        nombre: body.nombre,
-        descripcion: body.descripcion,
+        usuario_id: body.usuario_id,
+        titulo: body.titulo,
+        activa: body.activa ?? true,
       },
     });
-    return NextResponse.json(nuevo);
+    return NextResponse.json(nueva);
   } catch (error: unknown) {
     const mensaje = error instanceof Error ? error.message : "Error desconocido";
     return NextResponse.json(
-      { error: "Error al crear edificio", detalle: mensaje },
+      { error: "Error al crear conversacion", detalle: mensaje },
       { status: 500 }
     );
   }
