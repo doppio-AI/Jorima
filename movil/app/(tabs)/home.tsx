@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -6,21 +6,25 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
-import {
-  Feather,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { COLORS, SIZES } from "@/constants/theme";
 import ThemedText from "@/components/ThemedText";
 import ThemedButton from "@/components/ThemedButton";
 
+const API_URL = "http://10.13.32.169:3000"; // cámbiala por tu IP real
+
 type Usuario = {
   id?: number;
   nombre?: string;
   correo?: string;
+  tipo_usuario?: number;
+  edificio_id?: number;
+  turno?: string | null;
 };
 
 type Message = {
@@ -28,11 +32,14 @@ type Message = {
   text: string;
 };
 
+type ChatResponse = {
+  conversacion_id: number;
+  respuesta: string;
+};
+
 export default function HomeScreen() {
-  const [usuario] = useState<Usuario>({
-    nombre: "Ricardo",
-    correo: "ricardo@jorima.com",
-  });
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   const [mood, setMood] = useState<string | null>(null);
 
@@ -45,8 +52,31 @@ export default function HomeScreen() {
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [conversacionId, setConversacionId] = useState<number | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem("usuario");
+
+        if (!storedUser) {
+          router.replace("/(auth)/login");
+          return;
+        }
+
+        const parsedUser = JSON.parse(storedUser);
+        setUsuario(parsedUser);
+      } catch (error) {
+        router.replace("/(auth)/login");
+      } finally {
+        setCheckingSession(false);
+      }
+    };
+
+    loadUser();
+  }, []);
 
   const getMoodIconName = () => {
     switch (mood) {
@@ -62,31 +92,109 @@ export default function HomeScreen() {
     }
   };
 
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 120);
+  };
+
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !usuario?.id) return;
 
     const textoUsuario = input.trim();
 
     setMessages((prev) => [...prev, { role: "user", text: textoUsuario }]);
     setInput("");
     setLoading(true);
+    scrollToBottom();
 
-    setTimeout(() => {
+    try {
+      const res = await fetch(`${API_URL}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          usuario_id: usuario.id,
+          mensaje: textoUsuario,
+          conversacion_id: conversacionId,
+        }),
+      });
+
+      const data: ChatResponse | { error?: string } = await res.json();
+
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            text:
+              "Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.",
+          },
+        ]);
+        return;
+      }
+
+      const chatData = data as ChatResponse;
+
+      if (!conversacionId && chatData.conversacion_id) {
+        setConversacionId(chatData.conversacion_id);
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: "Gracias por compartir eso. Estoy aquí para escucharte y apoyarte.",
+          text:
+            chatData.respuesta ||
+            "Lo siento, no pude generar una respuesta en este momento.",
         },
       ]);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: "No se pudo conectar con el servidor. Verifica tu conexión.",
+        },
+      ]);
+    } finally {
       setLoading(false);
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 1200);
+      scrollToBottom();
+    }
   };
 
-  const logout = () => {
-    router.replace("/(auth)/login");
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem("usuario");
+      router.replace("/(auth)/login");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo cerrar la sesión correctamente.");
+    }
   };
+
+  const startNewConversation = () => {
+    setConversacionId(null);
+    setMessages([
+      {
+        role: "assistant",
+        text: "Inicia tu conversación con Jorima, tu asistente de bienestar emocional.",
+      },
+    ]);
+    setInput("");
+  };
+
+  if (checkingSession) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerState}>
+          <ThemedText variant="body" color={COLORS.textSecondary}>
+            Cargando sesión...
+          </ThemedText>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -95,15 +203,21 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerTextBlock}>
             <ThemedText variant="bodySmall" color={COLORS.textSecondary}>
               Bienvenido de vuelta
             </ThemedText>
+
             <ThemedText variant="h2" color={COLORS.primary}>
-              Hola, {usuario?.nombre || usuario?.correo}
+              Hola, {usuario?.nombre || usuario?.correo || "Usuario"}
             </ThemedText>
+
+            {!!usuario?.turno && (
+              <ThemedText variant="caption" color={COLORS.textSecondary}>
+                Turno: {usuario.turno}
+              </ThemedText>
+            )}
           </View>
 
           <TouchableOpacity style={styles.logoutButton} onPress={logout}>
@@ -111,7 +225,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Mood card */}
         <View style={styles.card}>
           <ThemedText variant="h3" color={COLORS.text}>
             ¿Cómo te sientes hoy antes de empezar?
@@ -141,6 +254,7 @@ export default function HomeScreen() {
                     size={26}
                     color={selected ? COLORS.white : COLORS.primary}
                   />
+
                   <ThemedText
                     variant="bodySmall"
                     color={selected ? COLORS.white : COLORS.text}
@@ -162,13 +276,21 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Chat card */}
         <View style={styles.card}>
-          <View style={styles.chatHeader}>
-            <ThemedText variant="h3">Chat Privado y Seguro</ThemedText>
-            <ThemedText variant="bodySmall" color={COLORS.textSecondary}>
-              Tus conversaciones son confidenciales
-            </ThemedText>
+          <View style={styles.chatHeaderRow}>
+            <View style={styles.chatHeader}>
+              <ThemedText variant="h3">Chat Privado y Seguro</ThemedText>
+              <ThemedText variant="bodySmall" color={COLORS.textSecondary}>
+                Tus conversaciones son confidenciales
+              </ThemedText>
+            </View>
+
+            <TouchableOpacity
+              style={styles.newChatButton}
+              onPress={startNewConversation}
+            >
+              <Feather name="edit-3" size={16} color={COLORS.primary} />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.chatMessages}>
@@ -223,12 +345,16 @@ export default function HomeScreen() {
               value={input}
               onChangeText={setInput}
               editable={!loading}
+              multiline
             />
 
             <TouchableOpacity
-              style={styles.sendButton}
+              style={[
+                styles.sendButton,
+                (!input.trim() || loading) && styles.sendButtonDisabled,
+              ]}
               onPress={sendMessage}
-              disabled={loading}
+              disabled={loading || !input.trim()}
             >
               <Feather
                 name={loading ? "loader" : "send"}
@@ -239,11 +365,10 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Botón extra opcional */}
         <ThemedButton
           title="Ver mi historial"
           variant="outline"
-          onPress={() => {}}
+          onPress={() => router.push("/(tabs)/historial")}
         />
       </ScrollView>
     </SafeAreaView>
@@ -256,6 +381,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
+  centerState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: SIZES.padding,
+  },
+
   scrollContent: {
     padding: SIZES.padding,
     paddingBottom: 32,
@@ -265,8 +397,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 8,
+  },
+
+  headerTextBlock: {
+    flex: 1,
+    paddingRight: 12,
   },
 
   logoutButton: {
@@ -323,8 +460,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  chatHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
   chatHeader: {
+    flex: 1,
     gap: 4,
+  },
+
+  newChatButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   chatMessages: {
@@ -357,7 +513,7 @@ const styles = StyleSheet.create({
 
   chatInputRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: 10,
     marginTop: 6,
   },
@@ -365,12 +521,15 @@ const styles = StyleSheet.create({
   chatInput: {
     flex: 1,
     minHeight: 50,
+    maxHeight: 120,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 14,
     backgroundColor: COLORS.background,
     paddingHorizontal: 14,
+    paddingVertical: 12,
     color: COLORS.text,
+    textAlignVertical: "top",
   },
 
   sendButton: {
@@ -380,5 +539,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.secondary,
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  sendButtonDisabled: {
+    opacity: 0.6,
   },
 });

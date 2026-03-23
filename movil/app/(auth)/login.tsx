@@ -1,60 +1,128 @@
-import React from "react";
-import { SafeAreaView, StyleSheet, View, TouchableOpacity } from "react-native";
+import React, { useState } from "react";
+import {
+  SafeAreaView,
+  StyleSheet,
+  View,
+  TouchableOpacity,
+  Alert,
+} from "react-native";
+import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { COLORS, SIZES } from "@/constants/theme";
 import ThemedText from "@/components/ThemedText";
 import ThemedInput from "@/components/ThemedInput";
 import ThemedButton from "@/components/ThemedButton";
-import { router } from "expo-router";
+
+const API_URL = "http://10.13.32.169:3000"; // cámbiala por tu IP real
 
 export default function LoginScreen() {
+  const [correo, setCorreo] = useState("");
+  const [contrasena, setContrasena] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async () => {
+    if (!correo.trim() || !contrasena.trim()) {
+      setError("Completa todos los campos");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const res = await fetch(`${API_URL}/api/login/mobile`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          correo: correo.trim(),
+          contrasena: contrasena.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Error al iniciar sesión");
+        return;
+      }
+
+      await AsyncStorage.setItem("usuario", JSON.stringify(data.usuario));
+
+      router.replace("/(tabs)/home");
+    } catch (err) {
+      setError("No se pudo conectar con el servidor");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-
-        {/* Header */}
         <View style={styles.header}>
           <ThemedText variant="h1" color={COLORS.primary}>
-  Jorima
-</ThemedText>
+            Jorima
+          </ThemedText>
           <ThemedText variant="body" color={COLORS.textSecondary}>
             Bienestar laboral en un solo lugar
           </ThemedText>
         </View>
 
-        {/* Form */}
         <View style={styles.form}>
-          <ThemedInput placeholder="Correo electrónico" />
+          <ThemedInput
+            placeholder="Correo electrónico"
+            value={correo}
+            onChangeText={setCorreo}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
 
           <View style={styles.inputGap} />
-          <ThemedInput placeholder="Contraseña" secureTextEntry />
 
-         <ThemedButton
-  title="Iniciar sesión"
-  variant="secondary"
-  onPress={() => router.replace("/(tabs)/home")}
-/>
-          
-          <View style={styles.registerContainer}>
-  <ThemedText variant="bodySmall" color={COLORS.textSecondary}>
-    ¿No tienes cuenta?{" "}
-  </ThemedText>
+          <ThemedInput
+            placeholder="Contraseña"
+            secureTextEntry
+            value={contrasena}
+            onChangeText={setContrasena}
+            autoCapitalize="none"
+          />
 
-  <TouchableOpacity onPress={() => router.replace("/(tabs)/home")}>
-    <ThemedText variant="bodySmall" color={COLORS.primary}>
-      Crear cuenta
-    </ThemedText>
-  </TouchableOpacity>
-</View>
+          <View style={styles.buttonGap} />
+
+          <ThemedButton
+            title={loading ? "Iniciando..." : "Iniciar sesión"}
+            variant="secondary"
+            onPress={handleLogin}
+            disabled={loading}
+          />
+
+          {error ? (
+            <View style={styles.errorBox}>
+              <ThemedText variant="bodySmall" color={COLORS.error}>
+                {error}
+              </ThemedText>
+            </View>
+          ) : null}
 
           <View style={styles.linkContainer}>
-            <TouchableOpacity>
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert(
+                  "Recuperación de acceso",
+                  "Esta opción la conectamos después."
+                )
+              }
+            >
               <ThemedText variant="bodySmall" color={COLORS.primary}>
                 ¿Olvidaste tu contraseña?
               </ThemedText>
             </TouchableOpacity>
           </View>
         </View>
-
       </View>
     </SafeAreaView>
   );
@@ -88,13 +156,13 @@ const styles = StyleSheet.create({
     height: 24,
   },
 
+  errorBox: {
+    marginTop: 12,
+    alignItems: "center",
+  },
+
   linkContainer: {
     marginTop: 16,
     alignItems: "center",
   },
-  registerContainer: {
-  flexDirection: "row",
-  justifyContent: "center",
-  marginTop: 20,
-},
 });
