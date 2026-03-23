@@ -181,6 +181,10 @@ export default function Login() {
           ¿Olvidé mi contraseña?
         </a>
 
+        <a className="link link-primary" href="/registro">
+          Registrarse
+        </a>
+
       </form>
 
       <footer>

@@ -14,6 +14,7 @@ import {
   FiMeh,
   FiSend,
   FiLoader,
+  FiUser,
 } from "react-icons/fi";
 
 type Usuario = {
@@ -231,16 +232,23 @@ export default function UsuariosPage() {
               Mi Historial
             </a>
 
-            <a className="sidebar-link">
+            <a className="sidebar-link" onClick={() => router.push("/recursos")}>
               <FiBookOpen size={20} />
               Recursos de Ayuda
             </a>
           </nav>
         </div>
 
-        <div className="logout" onClick={logout}>
-          <FiLogOut size={20} />
-          Cerrar Sesión
+        <div>
+          <a className="sidebar-link" onClick={() => router.push("/perfil")}>
+            <FiUser size={20} />
+            Mi Perfil
+          </a>
+
+          <div className="logout" onClick={logout}>
+            <FiLogOut size={20} />
+            Cerrar Sesión
+          </div>
         </div>
       </aside>
 

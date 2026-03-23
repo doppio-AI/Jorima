@@ -13,6 +13,7 @@ export async function GET() {
     return NextResponse.json(usuarios);
   } catch (error: unknown) {
     const mensaje =
+    console.error("ERROR REGISTRO:", error);
       error instanceof Error ? error.message : "Error desconocido";
 
     return NextResponse.json(
