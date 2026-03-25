@@ -16,7 +16,7 @@ import { COLORS, SIZES } from "@/constants/theme";
 import ThemedText from "@/components/ThemedText";
 import ThemedButton from "@/components/ThemedButton";
 
-const API_URL = "http://10.13.32.169:3000"; // cámbiala por tu IP real
+const API_URL = "http://10.13.3.228:3000"; // cámbiala por tu IP real
 
 type Usuario = {
   id?: number;
