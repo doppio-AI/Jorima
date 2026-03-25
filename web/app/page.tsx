@@ -16,10 +16,6 @@ export default function Login() {
     contrasena: "",
   });
 
-  /* ======================
-     OBTENER PUBLIC KEY
-  ====================== */
-
   useEffect(() => {
     fetch("/api/public-key")
       .then(res => res.json())
