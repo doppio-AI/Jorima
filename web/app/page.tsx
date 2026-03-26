@@ -47,14 +47,10 @@ export default function Login() {
       /* CIFRAR DATOS */
 
       const encryptedData = CryptoJS.AES.encrypt(
-        payload,
-        aesKey,
-        {
-          iv,
-          mode: CryptoJS.mode.CBC,
-          padding: CryptoJS.pad.Pkcs7
-        }
-      ).ciphertext.toString(CryptoJS.enc.Base64);
+  payload,
+  aesKey,
+  { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+).ciphertext.toString(CryptoJS.enc.Base64);
 
       /* CIFRAR AES CON RSA */
 

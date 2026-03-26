@@ -40,10 +40,10 @@ export async function POST(request: Request) {
 
     //   Se utiliza el algoritmo AES-256-CBC
     const decipher = crypto.createDecipheriv(
-      "aes-256-cbc",
-      aesKey,
-      Buffer.from(iv, "base64")
-    );
+  "aes-256-cbc",
+  aesKey,
+  Buffer.from(iv, "base64")
+);
 
     let decrypted =
       decipher.update(encryptedData, "base64", "utf8");
@@ -126,17 +126,22 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  const response = NextResponse.json({ message: "Logout exitoso" });
+  const response = NextResponse.json(
+    { message: "Logout exitoso" },
+    { status: 200 }
+  );
 
+  // Borrar cookie privada
   response.cookies.set("usuario", "", {
     httpOnly: true,
     path: "/",
-    expires: new Date(0)
+    maxAge: 0, // Expira inmediatamente
   });
 
+  // Borrar cookie pública
   response.cookies.set("usuario_public", "", {
     path: "/",
-    expires: new Date(0)
+    maxAge: 0, // Expira inmediatamente
   });
 
   return response;

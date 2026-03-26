@@ -1,0 +1,165 @@
+.page {
+  width: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-azul-profundo);
+}
+
+.header p {
+  margin: 0;
+  color: var(--neutral-500);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-16);
+}
+
+.card {
+  background: var(--neutral-50);
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-lg);
+  padding: var(--space-16);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+.cardSelected {
+  border-color: var(--color-verde-turquesa);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.buildingName {
+  font-weight: 700;
+  color: var(--neutral-900);
+}
+
+.riskBadge {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 999px;
+  color: white;
+  white-space: nowrap;
+}
+
+.metricRow {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metricLabel {
+  font-size: 0.8rem;
+  color: var(--neutral-500);
+}
+
+.metricValue {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--neutral-900);
+}
+
+.details {
+  background: var(--neutral-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--neutral-300);
+  padding: var(--space-16);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.detailsTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.detailsTitle h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--neutral-900);
+}
+
+.lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-16);
+}
+
+@media (max-width: 900px) {
+  .lists {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sublist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sublist h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--neutral-900);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--neutral-100);
+  background: var(--neutral-50);
+}
+
+.rowLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowTitle {
+  font-weight: 600;
+  color: var(--neutral-900);
+  font-size: 0.92rem;
+}
+
+.rowMeta {
+  font-size: 0.8rem;
+  color: var(--neutral-500);
+}

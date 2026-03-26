@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import AdminSidebarSimple from "@/app/components/admin-sidebar-simple";
+import AdminStats from "@/app/components/admin-stats";
+import { FiLogOut } from "react-icons/fi"; 
 
 interface Usuario {
   id: number;
@@ -10,7 +13,16 @@ interface Usuario {
   tipo_usuario: number;
   edificio_id?: number;
   turno?: string;
-}
+} 
+
+type UsuarioApi = {
+  usuario_id: number;
+  nombre: string;
+  correo: string;
+  tipo_usuario: number;
+  edificio_id: number;
+  turno: string | null;
+};
 
 type Filtro = "todos" | "usuario" | "admin";
 
@@ -29,11 +41,10 @@ export default function AdminUsuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
-
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
-
   const [showForm, setShowForm] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const [form, setForm] = useState<FormData>({
     nombre: "",
@@ -45,19 +56,24 @@ export default function AdminUsuarios() {
   });
 
   const fetchUsuarios = async () => {
-    const res = await fetch("/api/usuarios");
-    const data = await res.json();
-
-    setUsuarios(
-      data.map((u: any) => ({
-        id: u.usuario_id,
-        nombre: u.nombre,
-        correo: u.correo,
-        tipo_usuario: u.tipo_usuario,
-        edificio_id: u.edificio_id,
-        turno: u.turno,
-      }))
-    );
+    try {
+      const res = await fetch("/api/usuarios");
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+      
+      setUsuarios(
+        (data as UsuarioApi[]).map((u) => ({
+          id: u.usuario_id,
+          nombre: u.nombre,
+          correo: u.correo,
+          tipo_usuario: u.tipo_usuario,
+          edificio_id: u.edificio_id,
+          turno: u.turno ?? "",
+        }))
+      );
+    } catch (error) {
+      console.error("Error al obtener usuarios:", error);
+    }
   };
 
   useEffect(() => {
@@ -65,22 +81,15 @@ export default function AdminUsuarios() {
   }, []);
 
   const handleLogout = () => {
-    document.cookie =
-      "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+    document.cookie = "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
     router.push("/");
   };
 
-  const getRolTexto = (tipo: number) => {
-    return tipo === 1 ? "admin" : "usuario";
-  };
+  const getRolTexto = (tipo: number) => (tipo === 1 ? "admin" : "usuario");
 
   const usuariosFiltrados = usuarios
-    .filter((u) =>
-      filtro === "todos" ? true : getRolTexto(u.tipo_usuario) === filtro
-    )
-    .filter((u) =>
-      u.nombre.toLowerCase().includes(busqueda.toLowerCase())
-    );
+    .filter((u) => (filtro === "todos" ? true : getRolTexto(u.tipo_usuario) === filtro))
+    .filter((u) => u.nombre.toLowerCase().includes(busqueda.toLowerCase()));
 
   const handleSave = async () => {
     const tipo_usuario = form.rol === "admin" ? 1 : 2;
@@ -93,52 +102,35 @@ export default function AdminUsuarios() {
       turno: form.turno,
     };
 
-    if (form.contrasena) {
-      body.contrasena = form.contrasena;
-    }
+    if (form.contrasena) body.contrasena = form.contrasena;
 
-    if (selectedUser) {
-      await fetch(`/api/usuarios/${selectedUser.id}`, {
-        method: "PUT",
+    try {
+      const url = selectedUser ? `/api/usuarios/${selectedUser.id}` : "/api/usuarios";
+      const method = selectedUser ? "PUT" : "POST";
+
+      await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-    } else {
-      await fetch("/api/usuarios", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...body,
-          contrasena: form.contrasena,
-        }),
-      });
+
+      resetForm();
+      fetchUsuarios();
+    } catch (error) {
+      console.error("Error al guardar:", error);
     }
-
-    setShowForm(false);
-    setSelectedUser(null);
-    setForm({
-      nombre: "",
-      correo: "",
-      contrasena: "",
-      rol: "usuario",
-      edificio_id: 1,
-      turno: "",
-    });
-
-    fetchUsuarios();
   };
 
   const handleDelete = async () => {
     if (!selectedUser) return;
-
-    await fetch(`/api/usuarios/${selectedUser.id}`, {
-      method: "DELETE",
-    });
-
-    setDeleteOpen(false);
-    setSelectedUser(null);
-
-    fetchUsuarios();
+    try {
+      await fetch(`/api/usuarios/${selectedUser.id}`, { method: "DELETE" });
+      setDeleteOpen(false);
+      setSelectedUser(null);
+      fetchUsuarios();
+    } catch (error) {
+      console.error("Error al eliminar:", error);
+    }
   };
 
   const handleEdit = (user: Usuario) => {
@@ -156,252 +148,237 @@ export default function AdminUsuarios() {
 
   const handleCreate = () => {
     setSelectedUser(null);
-    setForm({
-      nombre: "",
-      correo: "",
-      contrasena: "",
-      rol: "usuario",
-      edificio_id: 1,
-      turno: "",
-    });
+    resetForm();
     setShowForm(true);
+  };
+
+  const resetForm = () => {
+    setShowForm(false);
+    setSelectedUser(null);
+    setForm({ nombre: "", correo: "", contrasena: "", rol: "usuario", edificio_id: 1, turno: "" });
   };
 
   return (
     <div className="dashboard-container">
-      <aside className="sidebar">
-        <div>
-          <div className="sidebar-logo">Admin</div>
-          <nav>
-            <a className="sidebar-link active">Usuarios</a>
-            <a className="sidebar-link">Reportes</a>
-            <a className="sidebar-link">Configuración</a>
-          </nav>
-        </div>
-
-        <div
-          className="logout"
-          onClick={handleLogout}
-          style={{ cursor: "pointer" }}
-        >
-          Cerrar sesión
-        </div>
-      </aside>
+      <AdminSidebarSimple active="usuarios" onLogout={handleLogout} />
 
       <main className="dashboard-main">
         <div className="dashboard-header">
-          <h1>Panel de Administrador</h1>
-          <p>Gestión de usuarios del sistema</p>
-        </div>
-
-        <div className="chat-card" style={{ display: "flex", gap: "10px" }}>
-          <button onClick={() => setFiltro("todos")} className="btn-primary">
-            Todos
-          </button>
-          <button onClick={() => setFiltro("usuario")} className="btn-primary">
-            Usuarios
-          </button>
-          <button onClick={() => setFiltro("admin")} className="btn-primary">
-            Admin
-          </button>
-        </div>
-
-        <div className="chat-card">
-          <div className="form-group">
-            <label>Buscar usuario</label>
-            <input
-              type="text"
-              placeholder="Buscar por nombre..."
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-            />
+          <div>
+            <h1>Gestión de Usuarios</h1>
+            <p style={{ color: "var(--neutral-500)", margin: 0 }}>
+              Administra los usuarios del sistema
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button
+              className="btn-volver"
+              onClick={() => setShowStats(!showStats)}
+            >
+              {showStats ? "Ocultar estadísticas" : "Ver estadísticas"}
+            </button>
+            <button className="btn-primary" onClick={handleCreate}>
+              + Nuevo usuario
+            </button>
           </div>
         </div>
 
-        <div className="chat-card">
-          <div className="chat-header">
-            <strong>Usuarios registrados</strong>
+        {showStats && (
+          <div style={{ marginBottom: 24 }}>
+            <AdminStats />
           </div>
+        )}
 
-          <div className="historial-container">
-            {usuariosFiltrados.map((user) => (
-              <div key={user.id} className="historial-card">
-                <div className="historial-card-header">
-                  <div className="historial-card-left">
-                    <div className="historial-card-info">
-                      <strong>{user.nombre}</strong>
-                      <span className="historial-card-meta">
-                        {user.correo}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="historial-card-right">
-                    {getRolTexto(user.tipo_usuario)}
-                  </div>
-                </div>
-
-                <div
-                  style={{ padding: "16px", display: "flex", gap: "8px" }}
-                >
-                  <button
-                    className="btn-primary"
-                    onClick={() => handleEdit(user)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    className="btn-volver"
-                    onClick={() => {
-                      setSelectedUser(user);
-                      setDeleteOpen(true);
-                    }}
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="chat-card">
-          <div className="chat-header">
-            <strong>Acciones rápidas</strong>
-          </div>
-
-          <button className="btn-primary" onClick={handleCreate}>
-            Agregar usuario
-          </button>
-        </div>
-
-        {/* PANEL DE FORMULARIO */}
-        {showForm && (
-  <div className="drawer-overlay">
-    <div className="drawer">
-      <div className="drawer-header">
-        <strong>
-          {selectedUser ? "Editar usuario" : "Crear usuario"}
-        </strong>
-        <button onClick={() => setShowForm(false)}>✕</button>
-      </div>
-
-      <div className="drawer-body">
-        <div className="form-group">
-          <label>Nombre</label>
+        <div className="filters" style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
           <input
-            value={form.nombre}
-            onChange={(e) =>
-              setForm({ ...form, nombre: e.target.value })
-            }
+            className="search-input"
+            type="text"
+            placeholder="Buscar por nombre..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
           />
-        </div>
-
-        <div className="form-group">
-          <label>Correo</label>
-          <input
-            value={form.correo}
-            onChange={(e) =>
-              setForm({ ...form, correo: e.target.value })
-            }
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Contraseña</label>
-          <input
-            type="password"
-            placeholder="Dejar vacío para no cambiar"
-            value={form.contrasena}
-            onChange={(e) =>
-              setForm({ ...form, contrasena: e.target.value })
-            }
-          />
-        </div>
-
-        <div style={{ display: "flex", gap: "10px" }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label>Edificio</label>
-            <input
-              type="number"
-              value={form.edificio_id}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  edificio_id: Number(e.target.value),
-                })
-              }
-            />
-          </div>
-
-          <div className="form-group" style={{ flex: 1 }}>
-            <label>Turno</label>
-            <input
-              placeholder="mañana / tarde / noche"
-              value={form.turno}
-              onChange={(e) =>
-                setForm({ ...form, turno: e.target.value })
-              }
-            />
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>Rol</label>
           <select
-            value={form.rol}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                rol: e.target.value as "usuario" | "admin",
-              })
-            }
+            className="filter-select"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value as Filtro)}
           >
-            <option value="usuario">Usuario</option>
-            <option value="admin">Administrador</option>
+            <option value="todos">Todos los roles</option>
+            <option value="usuario">Usuarios</option>
+            <option value="admin">Administradores</option>
           </select>
         </div>
-      </div>
 
-      <div className="drawer-footer">
-        <button
-          className="btn-volver"
-          onClick={() => setShowForm(false)}
-        >
-          Cancelar
-        </button>
+        <div className="table-wrapper">
+          <table className="users-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Rol</th>
+                <th>Edificio ID</th>
+                <th>Turno</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuariosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", color: "var(--neutral-500)", padding: 32 }}>
+                    No hay usuarios que coincidan
+                  </td>
+                </tr>
+              ) : (
+                usuariosFiltrados.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.nombre}</td>
+                    <td>{u.correo}</td>
+                    <td>
+                      <span
+                        className="badge"
+                        style={{
+                          background: u.tipo_usuario === 1 ? "var(--color-azul-profundo)" : "var(--color-verde-turquesa)",
+                          color: "white",
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          fontSize: "0.8rem",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {getRolTexto(u.tipo_usuario)}
+                      </span>
+                    </td>
+                    <td>{u.edificio_id ?? "—"}</td>
+                    <td>{u.turno || "—"}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          className="btn-volver"
+                          style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                          onClick={() => handleEdit(u)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          style={{
+                            padding: "6px 12px",
+                            fontSize: "0.85rem",
+                            background: "#DC2626",
+                            color: "white",
+                            border: "none",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => { setSelectedUser(u); setDeleteOpen(true); }}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        <button className="btn-primary" onClick={handleSave}>
-          Guardar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-      </main>
+        {/* --- MODALES Y DRAWERS (Sin cambios mayores, solo correcciones de sintaxis menor) --- */}
+        {showForm && (
+          <div className="drawer-overlay" onClick={resetForm}>
+            <div className="drawer" onClick={(e) => e.stopPropagation()}>
+              <div className="drawer-header">
+                <h3>{selectedUser ? "Editar usuario" : "Nuevo usuario"}</h3>
+                <button className="drawer-close" onClick={resetForm}>✕</button>
+              </div>
 
-      {deleteOpen && (
-        <div className="modal">
-          <div className="bg-white p-4">
-            <p>¿Eliminar a {selectedUser?.nombre}?</p>
+              <div className="drawer-body">
+                <div className="form-group">
+                  <label>Nombre</label>
+                  <input
+                    type="text"
+                    value={form.nombre}
+                    onChange={(e) => setForm((p) => ({ ...p, nombre: e.target.value }))}
+                    placeholder="Nombre completo"
+                  />
+                </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-                marginTop: "10px",
-              }}
-            >
-              <button className="btn-volver" onClick={handleDelete}>
-                Eliminar
-              </button>
-              <button onClick={() => setDeleteOpen(false)}>
-                Cancelar
-              </button>
+                <div className="form-group">
+                  <label>Correo</label>
+                  <input
+                    type="email"
+                    value={form.correo}
+                    onChange={(e) => setForm((p) => ({ ...p, correo: e.target.value }))}
+                    placeholder="correo@ejemplo.com"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Contraseña {selectedUser && "(dejar vacío para no cambiar)"}</label>
+                  <input
+                    type="password"
+                    value={form.contrasena}
+                    onChange={(e) => setForm((p) => ({ ...p, contrasena: e.target.value }))}
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Rol</label>
+                  <select
+                    value={form.rol}
+                    onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as "usuario" | "admin" }))}
+                  >
+                    <option value="usuario">Usuario</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Edificio ID</label>
+                  <input
+                    type="number"
+                    value={form.edificio_id}
+                    onChange={(e) => setForm((p) => ({ ...p, edificio_id: Number(e.target.value) }))}
+                    min={1}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Turno</label>
+                  <input
+                    type="text"
+                    value={form.turno}
+                    onChange={(e) => setForm((p) => ({ ...p, turno: e.target.value }))}
+                    placeholder="Matutino, Vespertino..."
+                  />
+                </div>
+              </div>
+
+              <div className="drawer-footer">
+                <button className="btn-volver" onClick={resetForm}>Cancelar</button>
+                <button className="btn-primary" onClick={handleSave}>Guardar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {deleteOpen && (
+          <div className="modal">
+            <div className="modal-content">
+              <h3>Confirmar eliminación</h3>
+              <p>¿Estás seguro de que deseas eliminar a <strong>{selectedUser?.nombre}</strong>? Esta acción no se puede deshacer.</p>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+                <button className="btn-volver" onClick={() => setDeleteOpen(false)}>Cancelar</button>
+                <button
+                  style={{ background: "#DC2626", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
+                  onClick={handleDelete}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

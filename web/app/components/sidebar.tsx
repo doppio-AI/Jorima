@@ -1,39 +1,70 @@
 "use client";
 
-import { useState } from "react";
-import Sidebar from "../components/sidebar";
-import MoodSelector from "../components/moodselector";
-import ChatCard from "../components/chatcard";
+import { useRouter } from "next/navigation";
+import {
+  FiHome,
+  FiClock,
+  FiBookOpen,
+  FiLogOut,
+  FiSmile,
+  FiUser,
+} from "react-icons/fi";
 
-export default function UsuariosPage() {
-  const [mood, setMood] = useState("");
+type SidebarProps = {
+  active?: "inicio" | "historial" | "recursos" | "perfil";
+};
+
+export default function Sidebar({ active }: SidebarProps) {
+  const router = useRouter();
+
+  const logout = async () => {
+    try {
+      await fetch("/api/login", { method: "DELETE" });
+      document.cookie =
+        "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      window.location.href = "/";
+    } catch {
+      window.location.href = "/";
+    }
+  };
+
+  const linkClass = (section: string) =>
+    `sidebar-link ${active === section ? "active" : ""}`.trim();
 
   return (
-    <div className="dashboard-container">
-
-      <Sidebar />
-
-      <main className="dashboard-main">
-
-        <div className="dashboard-header">
-          <h1>Hola, Jovannyyyy777</h1>
+    <aside className="sidebar">
+      <div>
+        <div className="sidebar-logo">
+          <FiSmile size={28} />
+          <span>Jorima</span>
         </div>
 
-        <section className="mood-card">
-          <h2>¿Cómo te sientes hoy antes de empezar?</h2>
+        <nav>
+          <a className={linkClass("inicio")} onClick={() => router.push("/usuarios")}>
+            <FiHome size={20} />
+            Inicio
+          </a>
+          <a className={linkClass("historial")} onClick={() => router.push("/historial")}>
+            <FiClock size={20} />
+            Mi Historial
+          </a>
+          <a className={linkClass("recursos")} onClick={() => router.push("/recursos")}>
+            <FiBookOpen size={20} />
+            Recursos de Ayuda
+          </a>
+        </nav>
+      </div>
 
-          <MoodSelector selectedMood={mood} onSelect={setMood} />
-
-          {mood && (
-            <p className="mood-thanks">
-              ✓ Gracias por compartir cómo te sientes
-            </p>
-          )}
-        </section>
-
-        <ChatCard />
-
-      </main>
-    </div>
+      <div>
+        <a className={linkClass("perfil")} onClick={() => router.push("/perfil")}>
+          <FiUser size={20} />
+          Mi Perfil
+        </a>
+        <div className="logout" onClick={logout}>
+          <FiLogOut size={20} />
+          Cerrar Sesión
+        </div>
+      </div>
+    </aside>
   );
 }

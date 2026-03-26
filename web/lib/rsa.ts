@@ -1,29 +1,30 @@
 import crypto from "crypto";
 
-let keys: any = null;
+/* ─────────────────────────────────────────────────
+   Gestión de claves RSA para el login híbrido
+   ───────────────────────────────────────────────── */
 
-export function getKeys() {
+let cachedKeyPair: { publicKey: string; privateKey: string } | null = null;
 
-  if (!keys) {
+export function getKeys(): { publicKey: string; privateKey: string } {
+  if (cachedKeyPair) return cachedKeyPair;
 
-    keys = crypto.generateKeyPairSync("rsa", {
+  /* Intentar leer claves de variables de entorno */
+  const envPublic = process.env.RSA_PUBLIC_KEY;
+  const envPrivate = process.env.RSA_PRIVATE_KEY;
 
-      modulusLength: 2048,
-
-      publicKeyEncoding: {
-        type: "pkcs1",
-        format: "pem"
-      },
-
-      privateKeyEncoding: {
-        type: "pkcs1",
-        format: "pem"
-      }
-
-    });
-
+  if (envPublic && envPrivate) {
+    cachedKeyPair = { publicKey: envPublic, privateKey: envPrivate };
+    return cachedKeyPair;
   }
 
-  return keys;
+  /* Generar un par de claves nuevo en memoria (solo para dev sin ENV) */
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "pkcs1", format: "pem" },
+    privateKeyEncoding: { type: "pkcs1", format: "pem" },
+  });
 
+  cachedKeyPair = { publicKey, privateKey };
+  return cachedKeyPair;
 }

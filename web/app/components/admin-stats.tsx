@@ -26,15 +26,7 @@ export default function AdminStats() {
 
     const fetchStats = async () => {
       try {
-        // Obtener tipo_usuario del localStorage
-        const userSession = localStorage.getItem("userSession");
-        const tipoUsuario = userSession ? JSON.parse(userSession).tipo_usuario : null;
-
-        const response = await fetch("/api/admin/stats", {
-          headers: {
-            "x-tipo-usuario": tipoUsuario?.toString() || "",
-          },
-        });
+        const response = await fetch("/api/admin/stats");
         if (!response.ok) {
           throw new Error("Error obteniendo estadísticas");
         }
@@ -56,7 +48,6 @@ export default function AdminStats() {
 
   return (
     <div className={styles.statsContainer}>
-      {/* KPIs principales */}
       <div className={styles.kpiGrid}>
         <div className={styles.kpiCard}>
           <div className={styles.kpiValue}>{stats.totalUsuarios}</div>
@@ -72,78 +63,65 @@ export default function AdminStats() {
         </div>
         <div className={styles.kpiCard}>
           <div className={styles.kpiValue}>{stats.totalRespuestas}</div>
-          <div className={styles.kpiLabel}>Respuestas Obtenidas</div>
+          <div className={styles.kpiLabel}>Respuestas Totales</div>
         </div>
       </div>
 
-      {/* Gráficos */}
       <div className={styles.chartsGrid}>
-        {/* Usuarios por edificio */}
         <div className={styles.chartCard}>
-          <h3>Usuarios por Edificio</h3>
-          <div className={styles.chartContent}>
-            {stats.usuariosPorEdificio.length > 0 ? (
-              stats.usuariosPorEdificio.map((item) => (
-                <div key={item.nombre} className={styles.barItem}>
-                  <div className={styles.barLabel}>{item.nombre}</div>
-                  <div className={styles.barContainer}>
-                    <div
-                      className={styles.bar}
-                      style={{
-                        width: `${(item.count / stats.totalUsuarios) * 100}%`,
-                      }}
-                    >
-                      {item.count}
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className={styles.noData}>Sin datos</p>
-            )}
-          </div>
+          <h4>Usuarios por edificio</h4>
+          {stats.usuariosPorEdificio.map((item) => (
+            <div key={item.nombre} className={styles.barRow}>
+              <span className={styles.barLabel}>{item.nombre}</span>
+              <div className={styles.barTrack}>
+                <div
+                  className={styles.barFill}
+                  style={{
+                    width: `${Math.min(100, (item.count / stats.totalUsuarios) * 100)}%`,
+                  }}
+                />
+              </div>
+              <span className={styles.barValue}>{item.count}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Distribución de turnos */}
         <div className={styles.chartCard}>
-          <h3>Distribución de Turnos</h3>
-          <div className={styles.chartContent}>
-            {stats.distribucionTurnos.length > 0 ? (
-              stats.distribucionTurnos.map((item) => (
-                <div key={item.turno} className={styles.pieItem}>
-                  <div className={styles.pieBall} />
-                  <span>{item.turno}: {item.count} usuarios</span>
-                </div>
-              ))
-            ) : (
-              <p className={styles.noData}>Sin datos de turnos</p>
-            )}
-          </div>
+          <h4>Distribución de turnos</h4>
+          {stats.distribucionTurnos.map((item) => (
+            <div key={item.turno} className={styles.barRow}>
+              <span className={styles.barLabel}>{item.turno}</span>
+              <div className={styles.barTrack}>
+                <div
+                  className={styles.barFill}
+                  style={{
+                    width: `${Math.min(100, (item.count / stats.totalUsuarios) * 100)}%`,
+                    background: "var(--color-verde-turquesa)",
+                  }}
+                />
+              </div>
+              <span className={styles.barValue}>{item.count}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Moods anonymos */}
         <div className={styles.chartCard}>
-          <h3>Estado de Ánimo (Anónimo)</h3>
-          <div className={styles.chartContent}>
-            {stats.distribucionMood.length > 0 ? (
-              stats.distribucionMood.map((item) => (
-                <div key={item.mood} className={styles.moodItem}>
-                  <div className={styles.moodLabel}>{item.mood}</div>
-                  <div className={styles.moodBar}>
-                    <div
-                      className={styles.moodFill}
-                      style={{
-                        width: `${(item.count / stats.totalRespuestas) * 100 || 0}%`,
-                      }}
-                    />
-                  </div>
-                  <span className={styles.moodCount}>{item.count}</span>
-                </div>
-              ))
-            ) : (
-              <p className={styles.noData}>Sin datos de moods</p>
-            )}
-          </div>
+          <h4>Distribución de mood</h4>
+          {stats.distribucionMood.slice(0, 6).map((item) => (
+            <div key={item.mood} className={styles.barRow}>
+              <span className={styles.barLabel}>{item.mood}</span>
+              <div className={styles.barTrack}>
+                <div
+                  className={styles.barFill}
+                  style={{
+                    width: `${Math.min(100, (item.count / stats.totalRespuestas) * 100)}%`,
+                    background: "#F59E0B",
+                  }}
+                />
+              </div>
+              <span className={styles.barValue}>{item.count}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

@@ -20,17 +20,22 @@ export default function ConfirmDeleteModal({
   onConfirm,
   user,
 }: Props) {
-
   if (!isOpen) return null;
 
   return (
     <div className="modal">
-      <div className="bg-white p-4">
-        <p>¿Eliminar a {user?.nombre}?</p>
+      <div className="modal-content">
+        <h3>Confirmar eliminación</h3>
+        <p>¿Estás seguro de que deseas eliminar a <strong>{user?.nombre}</strong>?</p>
 
-        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-          <button onClick={onConfirm}>Eliminar</button>
-          <button onClick={onClose}>Cancelar</button>
+        <div style={{ display: "flex", gap: "10px", marginTop: "16px", justifyContent: "flex-end" }}>
+          <button className="btn-volver" onClick={onClose}>Cancelar</button>
+          <button
+            style={{ background: "#DC2626", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
+            onClick={onConfirm}
+          >
+            Eliminar
+          </button>
         </div>
       </div>
     </div>

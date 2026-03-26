@@ -30,7 +30,6 @@ const ChatCard: React.FC = () => {
 
   return (
     <section className="chat-card">
-
       <div>
         <h2>Chat Privado y Seguro</h2>
         <p style={{ color: "var(--neutral-500)", fontSize: "0.9rem" }}>
@@ -50,13 +49,10 @@ const ChatCard: React.FC = () => {
           placeholder="Escribe tu mensaje aquí..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
         />
-
-        <button onClick={handleSend}>
-          Enviar
-        </button>
+        <button onClick={handleSend}>Enviar</button>
       </div>
-
     </section>
   );
 };

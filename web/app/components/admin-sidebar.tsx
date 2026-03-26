@@ -21,22 +21,26 @@ export default function AdminSidebar() {
       </div>
 
       <nav className={styles.sidebarNav}>
-        <Link href="/admin" className={styles.navItem}>
+        <Link href="/administrador" className={styles.navItem}>
           <i className="icon-home"></i>
-          {isOpen && <span>Dashboard</span>}
+          {isOpen && <span>Usuarios</span>}
+        </Link>
+        <Link href="/administrador/ambiente" className={styles.navItem}>
+          <i className="icon-chart"></i>
+          {isOpen && <span>Ambiente laboral</span>}
+        </Link>
+        <Link href="/administrador/reportes" className={styles.navItem}>
+          <i className="icon-file"></i>
+          {isOpen && <span>Reportes</span>}
         </Link>
         <Link href="/" className={styles.navItem}>
           <i className="icon-arrow-left"></i>
-          {isOpen && <span>Volver a Dashboard</span>}
-        </Link>
-        <Link href="#" className={styles.navItem}>
-          <i className="icon-settings"></i>
-          {isOpen && <span>Configuración</span>}
+          {isOpen && <span>Volver al inicio</span>}
         </Link>
       </nav>
 
       <div className={styles.sidebarFooter}>
-        {isOpen && <p className={styles.version}>v1.0 Admin</p>}
+        {isOpen && <p className={styles.version}>v2.0 Admin</p>}
       </div>
     </aside>
   );

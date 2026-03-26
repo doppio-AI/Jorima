@@ -1,16 +1,16 @@
 "use client";
 
-type Usuario = {
-  id?: number;
-  nombre: string;
-  correo: string;
-  rol: string;
-};
-
 type FormData = {
   nombre: string;
   correo: string;
   contrasena: string;
+  rol: string;
+};
+
+type Usuario = {
+  id?: number;
+  nombre: string;
+  correo: string;
   rol: string;
 };
 
@@ -31,56 +31,59 @@ export default function UserFormModal({
   setForm,
   user,
 }: Props) {
-
   if (!isOpen) return null;
 
   return (
     <div className="modal">
-      <div className="bg-white p-4">
+      <div className="modal-content">
         <h3>{user ? "Editar usuario" : "Crear usuario"}</h3>
 
-        <input
-          placeholder="Nombre"
-          value={form.nombre}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, nombre: e.target.value }))
-          }
-        />
+        <div className="form-group">
+          <label>Nombre</label>
+          <input
+            type="text"
+            placeholder="Nombre completo"
+            value={form.nombre}
+            onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))}
+          />
+        </div>
 
-        <input
-          placeholder="Correo"
-          value={form.correo}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, correo: e.target.value }))
-          }
-        />
+        <div className="form-group">
+          <label>Correo</label>
+          <input
+            type="email"
+            placeholder="correo@ejemplo.com"
+            value={form.correo}
+            onChange={(e) => setForm((prev) => ({ ...prev, correo: e.target.value }))}
+          />
+        </div>
 
         {!user && (
-          <input
-            type="password"
-            placeholder="Contraseña"
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                contrasena: e.target.value,
-              }))
-            }
-          />
+          <div className="form-group">
+            <label>Contraseña</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={form.contrasena}
+              onChange={(e) => setForm((prev) => ({ ...prev, contrasena: e.target.value }))}
+            />
+          </div>
         )}
 
-        <select
-          value={form.rol}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, rol: e.target.value }))
-          }
-        >
-          <option value="usuario">Tipo 2</option>
-          <option value="admin">Admin</option>
-        </select>
+        <div className="form-group">
+          <label>Rol</label>
+          <select
+            value={form.rol}
+            onChange={(e) => setForm((prev) => ({ ...prev, rol: e.target.value }))}
+          >
+            <option value="usuario">Usuario</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
 
-        <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
-          <button onClick={() => onSave(form)}>Guardar</button>
-          <button onClick={onClose}>Cancelar</button>
+        <div style={{ marginTop: "16px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button className="btn-volver" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" onClick={() => onSave(form)}>Guardar</button>
         </div>
       </div>
     </div>
