@@ -171,12 +171,6 @@ export default function AdminUsuarios() {
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button
-              className="btn-volver"
-              onClick={() => setShowStats(!showStats)}
-            >
-              {showStats ? "Ocultar estadísticas" : "Ver estadísticas"}
-            </button>
             <button className="btn-primary" onClick={handleCreate}>
               + Nuevo usuario
             </button>

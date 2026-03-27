@@ -20,7 +20,6 @@ model usuario {
   turno                                        String?        @db.VarChar(50)
   fecha_registro                               DateTime?      @default(now()) @db.Timestamp(6)
   conversacion                                 conversacion[]
-  encuesta                                     encuesta[]
   reporte_reporte_usuario_personal_idTousuario reporte[]      @relation("reporte_usuario_personal_idTousuario")
   reporte_reporte_usuario_rh_idTousuario       reporte[]      @relation("reporte_usuario_rh_idTousuario")
   edificio                                     edificio       @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuario_edificio")
@@ -28,36 +27,21 @@ model usuario {
   @@index([edificio_id], map: "idx_usuario_edificio")
 }
 
-model encuesta {
-  encuesta_id    Int         @id @default(autoincrement())
-  titulo         String      @db.VarChar(200)
-  descripcion    String?
-  fecha_creacion DateTime?   @default(now()) @db.Timestamp(6)
-  edificio_id    Int
-  creador_id     Int
-  usuario        usuario     @relation(fields: [creador_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_creador_encuesta")
-  edificio       edificio    @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_encuesta_edificio")
-  respuesta      respuesta[]
-
-  @@index([edificio_id], map: "idx_encuesta_edificio")
-}
-
 model edificio {
-  edificio_id Int        @id @default(autoincrement())
-  nombre      String     @db.VarChar(100)
-  descripcion String?
-  encuesta    encuesta[]
-  usuario     usuario[]
+  edificio_id       Int                 @id @default(autoincrement())
+  nombre            String              @db.VarChar(100)
+  descripcion       String?
+  respuesta         respuesta[]
+  riesgo_prediccion riesgo_prediccion[]
+  usuario           usuario[]
 }
 
 model respuesta {
   respuesta_id Int       @id @default(autoincrement())
-  encuesta_id  Int
-  respuesta    Json
+  edificio_id  Int
+  respuestas   Json
   fecha        DateTime? @default(now()) @db.Timestamp(6)
-  encuesta     encuesta  @relation(fields: [encuesta_id], references: [encuesta_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_respuesta_encuesta")
-
-  @@index([encuesta_id], map: "idx_respuesta_encuesta")
+  edificio     edificio  @relation(fields: [edificio_id], references: [edificio_id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model conversacion {
@@ -98,4 +82,16 @@ model reporte {
   fecha_creacion                               DateTime? @default(now()) @db.Timestamp(6)
   usuario_reporte_usuario_personal_idTousuario usuario   @relation("reporte_usuario_personal_idTousuario", fields: [usuario_personal_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reporte_personal")
   usuario_reporte_usuario_rh_idTousuario       usuario   @relation("reporte_usuario_rh_idTousuario", fields: [usuario_rh_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reporte_rh")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model riesgo_prediccion {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  edificio_id           Int
+  fecha                 DateTime? @default(now()) @db.Timestamp(6)
+  respuestas            Json
+  riesgo_base           Float
+  riesgo_proyeccion_30d Float
+  created_at            DateTime? @default(now()) @db.Timestamp(6)
+  edificio              edificio  @relation(fields: [edificio_id], references: [edificio_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_riesgo_edificio")
 }

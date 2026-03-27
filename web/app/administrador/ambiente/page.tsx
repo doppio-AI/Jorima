@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "./risk-dashboard.module.css";
 import AdminSidebarSimple from "@/app/components/admin-sidebar-simple";
+import RiskChart from "@/app/components/RiskChart";
 
 type RiskLevel = "bajo" | "medio" | "alto" | "crítico";
 
@@ -11,58 +12,19 @@ type BuildingRisk = {
   edificio_nombre: string | null;
   riskScore: number;
   riskLevel: RiskLevel;
-  probability: number;
-  impact: number;
-  trend: number;
-  avgScoreRecent: number | null;
-  probabilityBin: string;
-  impactBin: string;
   neurona: {
-    negativas_transformadas: number;
-    z: number;
     probabilidad: number;
     alerta: boolean;
   };
-  totals: {
-    recentCount: number;
-    prevCount: number;
-    negCountRecent: number;
-    negCountPrev: number;
-  };
-};
-
-type AreaRisk = {
-  encuesta_id: number;
-  edificio_id: number | null;
-  riskScore: number;
-  riskLevel: RiskLevel;
-  probability: number;
-  impact: number;
-  trend: number;
-  avgScoreRecent: number | null;
-};
-
-type UserRisk = {
-  edificio_id: number;
-  usuario_alias: string;
-  riskScore: number;
-  riskLevel: RiskLevel;
-  probability: number;
-  impact: number;
-  trend: number;
-  avgScoreRecent: number | null;
 };
 
 type RiskApiResponse = {
   buildings: BuildingRisk[];
-  areas: AreaRisk[];
-  users: UserRisk[];
-  window?: {   // 👈 ahora opcional (más seguro)
-    recentDays: number;
-    prevDays: number;
-    recentStart: string;
-    prevStart: string;
-  };
+};
+
+type PredData = {
+  historico: number[];
+  prediccion: number | null;
 };
 
 const riskColors: Record<RiskLevel, string> = {
@@ -72,38 +34,31 @@ const riskColors: Record<RiskLevel, string> = {
   "crítico": "#DC2626",
 };
 
-const getEnvironmentLabel = (level: RiskLevel) => {
-  switch (level) {
-    case "bajo": return "Ambiente laboral estable";
-    case "medio": return "Atención requerida";
-    case "alto": return "Riesgo elevado";
-    case "crítico": return "Riesgo crítico";
-  }
-};
-
 export default function AmbienteDashboardPage() {
-  const [data, setData] = useState<RiskApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<RiskApiResponse>({ buildings: [] });
+  const [predData, setPredData] = useState<PredData | null>(null);
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // =========================
+  // CARGAR EDIFICIOS
+  // =========================
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch("/api/evaluar-ambiente", { cache: "no-store" });
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.error || "No se pudo cargar el riesgo");
-        }
+        const res = await fetch("/api/riesgo");
+        const json = await res.json();
 
-        const json = (await res.json()) as RiskApiResponse;
-        setData(json);
+        const safeBuildings: BuildingRisk[] = json?.buildings || [];
 
-        if (json.buildings?.length > 0) {
-          setSelectedBuildingId(json.buildings[0].edificio_id);
+        setData({ buildings: safeBuildings });
+
+        if (safeBuildings.length > 0) {
+          setSelectedBuildingId(safeBuildings[0].edificio_id);
         }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Error desconocido");
+      } catch (error) {
+        console.error("Error cargando riesgos:", error);
+        setData({ buildings: [] });
       } finally {
         setLoading(false);
       }
@@ -112,186 +67,247 @@ export default function AmbienteDashboardPage() {
     load();
   }, []);
 
-  // ✅ valores seguros para window
-  const recentDays = data?.window?.recentDays ?? 30;
-  const prevDays = data?.window?.prevDays ?? 30;
+  // =========================
+  // CARGAR PREDICCIÓN
+  // =========================
+  useEffect(() => {
+    if (!selectedBuildingId) return;
 
+    const loadPrediction = async () => {
+      try {
+        const res = await fetch(`/api/riesgo/prediccion/${selectedBuildingId}`);
+        const json = await res.json();
+
+        setPredData({
+          historico: json?.historico || [],
+          prediccion: typeof json?.prediccion === "number" ? json.prediccion : null,
+        });
+      } catch (error) {
+        console.error("Error cargando predicción:", error);
+        setPredData({
+          historico: [],
+          prediccion: null,
+        });
+      }
+    };
+
+    loadPrediction();
+  }, [selectedBuildingId]);
+
+  // =========================
+  // EDIFICIO SELECCIONADO
+  // =========================
   const selectedBuilding = useMemo(() => {
-    if (!data || selectedBuildingId == null) return null;
-    return data.buildings.find((b) => b.edificio_id === selectedBuildingId) || null;
+    return data.buildings.find(
+      (b) => b.edificio_id === selectedBuildingId
+    );
   }, [data, selectedBuildingId]);
 
-  const areasForSelectedBuilding = useMemo(() => {
-    if (!data || selectedBuildingId == null) return [];
-    return data.areas
-      .filter((a) => a.edificio_id === selectedBuildingId)
-      .sort((a, b) => b.riskScore - a.riskScore);
-  }, [data, selectedBuildingId]);
+  // =========================
+  // ESTADÍSTICA
+  // =========================
+  const stats = useMemo(() => {
+    if (!predData?.historico || predData.historico.length === 0) return null;
 
-  const topUsersForSelectedBuilding = useMemo(() => {
-    if (!data || selectedBuildingId == null) return [];
-    return data.users
-      .filter((u) => u.edificio_id === selectedBuildingId)
-      .sort((a, b) => b.riskScore - a.riskScore)
-      .slice(0, 5);
-  }, [data, selectedBuildingId]);
+    const data = predData.historico;
+    const n = data.length;
+
+    const media = data.reduce((a, b) => a + b, 0) / n;
+
+    const varianza =
+      data.reduce((acc, val) => acc + Math.pow(val - media, 2), 0) / n;
+
+    const desviacion = Math.sqrt(varianza);
+
+    const first = data[0];
+    const last = data[data.length - 1];
+
+    let tendencia: "subiendo" | "bajando" | "estable" = "estable";
+    if (last > first) tendencia = "subiendo";
+    if (last < first) tendencia = "bajando";
+
+    return { media, varianza, desviacion, tendencia, n };
+  }, [predData]);
+
+  // =========================
+  // LOADING
+  // =========================
+  if (loading) {
+    return <div style={{ padding: 40 }}>Cargando...</div>;
+  }
 
   return (
     <div className="dashboard-container">
       <AdminSidebarSimple active="ambiente" />
 
-      <main className="dashboard-main">
-        <div className={styles.page}>
-          <div className={styles.header}>
-            <h1>Matriz de riesgo por edificio</h1>
-            <p>
-              Calculada con probabilidad (respuestas negativas), impacto (puntaje promedio)
-              y neurona artificial. Ventana: últimos {recentDays} días vs. {prevDays} días previos.
-            </p>
+      <main className={styles.page}>
+        <div className={styles.header}>
+          <h1>Matriz de Riesgo</h1>
+          <p>Monitoreo por edificio</p>
+        </div>
+
+        {data.buildings.length === 0 && (
+          <div style={{ padding: 20, textAlign: "center", color: "#666" }}>
+            No hay edificios registrados
           </div>
+        )}
 
-          {loading && (
-            <div className={styles.details}>
-              <div style={{ textAlign: "center", padding: 40, color: "var(--neutral-500)" }}>
-                Calculando matriz de riesgo...
-              </div>
-            </div>
-          )}
+        {/* ========================= */}
+        {/* LISTA */}
+        {/* ========================= */}
+        <div className={styles.grid}>
+          {data.buildings.map((b) => {
+            const riskScore = b.riskScore ?? 0;
+            const prob = b.neurona?.probabilidad ?? 0;
 
-          {error && (
-            <div className={styles.details}>
-              <p style={{ color: "#DC2626" }}>Error: {error}</p>
-            </div>
-          )}
+            return (
+              <div
+                key={b.edificio_id}
+                onClick={() => setSelectedBuildingId(b.edificio_id)}
+                className={`${styles.card} ${
+                  selectedBuildingId === b.edificio_id
+                    ? styles.cardSelected
+                    : ""
+                }`}
+              >
+                <div className={styles.cardTop}>
+                  <span className={styles.buildingName}>
+                    {b.edificio_nombre || "Sin nombre"}
+                  </span>
 
-          {data && (
-            <>
-              <div className={styles.grid}>
-                {data.buildings?.map((b) => (
-                  <div
-                    key={b.edificio_id}
-                    className={`${styles.card} ${selectedBuildingId === b.edificio_id ? styles.cardSelected : ""}`}
-                    onClick={() => setSelectedBuildingId(b.edificio_id)}
+                  <span
+                    className={styles.riskBadge}
+                    style={{
+                      background: riskColors[b.riskLevel] || "#999",
+                    }}
                   >
-                    <div className={styles.cardTop}>
-                      <div className={styles.buildingName}>
-                        {b.edificio_nombre || `Edificio ${b.edificio_id}`}
-                      </div>
-                      <div
-                        className={styles.riskBadge}
-                        style={{ background: riskColors[b.riskLevel] }}
-                      >
-                        {b.riskLevel}
-                      </div>
-                    </div>
+                    {b.riskLevel}
+                  </span>
+                </div>
 
-                    <div className={styles.metricRow}>
-                      <div className={styles.metricLabel}>
-                        {getEnvironmentLabel(b.riskLevel)}
-                      </div>
-                      <div className={styles.metricValue}>
-                        Riesgo: {(b.riskScore * 100).toFixed(1)}%
-                      </div>
-                      <div className={styles.metricValue} style={{ fontSize: "0.85rem", color: "var(--neutral-500)" }}>
-                        Prob: {b.probabilityBin} · Impacto: {b.impactBin}
-                      </div>
+                <div className={styles.metricRow}>
+                  <span>Riesgo</span>
+                  <span>{(riskScore * 100).toFixed(1)}%</span>
+                </div>
 
-                      {b.neurona?.alerta && (   // 👈 también protegido
-                        <div style={{ color: "#DC2626", fontSize: "0.8rem", fontWeight: 600, marginTop: 4 }}>
-                          ⚠ Neurona: alerta activada
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ marginTop: 8, fontSize: "0.8rem", color: "var(--neutral-500)" }}>
-                      Respuestas: {b.totals?.recentCount ?? 0} recientes · {b.totals?.negCountRecent ?? 0} negativas
-                    </div>
-                  </div>
-                ))}
+                <div className={styles.metricRow}>
+                  <span>Probabilidad</span>
+                  <span>{(prob * 100).toFixed(1)}%</span>
+                </div>
               </div>
+            );
+          })}
+        </div>
 
-              {selectedBuilding && (
-                <div className={styles.details}>
-                  <div className={styles.detailsTitle}>
-                    <h2>
-                      {selectedBuilding.edificio_nombre || `Edificio ${selectedBuilding.edificio_id}`}
-                    </h2>
-                    <div
-                      className={styles.riskBadge}
-                      style={{ background: riskColors[selectedBuilding.riskLevel] }}
-                    >
-                      {selectedBuilding.riskLevel}
+        {/* ========================= */}
+        {/* DETALLE */}
+        {/* ========================= */}
+        {selectedBuilding && (
+          <div className={styles.details}>
+            <h2>{selectedBuilding.edificio_nombre}</h2>
+
+            {!predData || predData.historico.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: "#666" }}>
+                No hay datos suficientes
+              </div>
+            ) : (
+              <>
+                <div className={styles.lists}>
+                  {/* ACTUAL */}
+                  <div className={styles.sublist}>
+                    <h3>Actual</h3>
+
+                    <div className={styles.row}>
+                      <span>Riesgo</span>
+                      <span>{(selectedBuilding.riskScore * 100).toFixed(1)}%</span>
+                    </div>
+
+                    <div className={styles.row}>
+                      <span>Probabilidad</span>
+                      <span>
+                        {(selectedBuilding.neurona.probabilidad * 100).toFixed(1)}%
+                      </span>
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-                    {[
-                      { label: "Riesgo total", value: `${(selectedBuilding.riskScore * 100).toFixed(1)}%` },
-                      { label: "Probabilidad", value: `${(selectedBuilding.probability * 100).toFixed(1)}%` },
-                      { label: "Impacto", value: `${(selectedBuilding.impact * 100).toFixed(1)}%` },
-                      { label: "Tendencia", value: `${selectedBuilding.trend >= 0 ? "+" : ""}${(selectedBuilding.trend * 100).toFixed(1)}%` },
-                      { label: "Score promedio", value: selectedBuilding.avgScoreRecent != null ? selectedBuilding.avgScoreRecent.toFixed(2) : "—" },
-                      { label: "Neurona (σ)", value: `${(selectedBuilding.neurona?.probabilidad ?? 0 * 100).toFixed(1)}%` },
-                    ].map(({ label, value }) => (
-                      <div key={label} style={{ background: "var(--neutral-100)", borderRadius: 12, padding: "12px 16px", border: "1px solid var(--neutral-300)" }}>
-                        <div style={{ fontSize: "0.78rem", color: "var(--neutral-500)" }}>{label}</div>
-                        <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--neutral-900)" }}>{value}</div>
+                  {/* PREDICCIÓN */}
+                  <div className={styles.sublist}>
+                    <h3>Predicción</h3>
+
+                    <div className={styles.row}>
+                      <span>Futuro</span>
+                      <span>
+                        {predData.prediccion !== null
+                          ? predData.prediccion.toFixed(2)
+                          : "Sin datos"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ESTADÍSTICA */}
+                  <div className={styles.sublist}>
+                    <h3>Estadística</h3>
+
+                    {stats && (
+                      <>
+                        <div className={styles.row}>
+                          <span>Muestra</span>
+                          <span>{stats.n}</span>
+                        </div>
+
+                        <div className={styles.row}>
+                          <span>Media</span>
+                          <span>{stats.media.toFixed(2)}</span>
+                        </div>
+
+                        <div className={styles.row}>
+                          <span>Varianza</span>
+                          <span>{stats.varianza.toFixed(3)}</span>
+                        </div>
+
+                        <div className={styles.row}>
+                          <span>Desviación</span>
+                          <span>{stats.desviacion.toFixed(3)}</span>
+                        </div>
+
+                        <div className={styles.row}>
+                          <span>Tendencia</span>
+                          <span>{stats.tendencia}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* INTERPRETACIÓN */}
+                  <div className={styles.sublist}>
+                    <h3>Interpretación</h3>
+
+                    {stats && (
+                      <div style={{ fontSize: 14 }}>
+                        {stats.media > 3.5 && "Condiciones buenas. "}
+                        {stats.media <= 3.5 && stats.media > 2 && "Condiciones regulares. "}
+                        {stats.media <= 2 && "Condiciones críticas. "}
+
+                        {stats.desviacion > 1 && "Alta variabilidad. "}
+                        {stats.desviacion <= 1 && "Sistema estable. "}
+
+                        {stats.tendencia === "subiendo" && "Tendencia positiva."}
+                        {stats.tendencia === "bajando" && "Tendencia negativa."}
                       </div>
-                    ))}
-                  </div>
-
-                  <div className={styles.lists}>
-                    <div className={styles.sublist}>
-                      <h3>Áreas / Encuestas (por riesgo)</h3>
-                      {areasForSelectedBuilding.length === 0 && (
-                        <div style={{ color: "var(--neutral-500)" }}>Sin datos</div>
-                      )}
-                      {areasForSelectedBuilding.map((a) => (
-                        <div key={a.encuesta_id} className={styles.row}>
-                          <div className={styles.rowLeft}>
-                            <div className={styles.rowTitle}>Encuesta #{a.encuesta_id}</div>
-                            <div className={styles.rowMeta}>
-                              Riesgo: {(a.riskScore * 100).toFixed(1)}%
-                            </div>
-                          </div>
-                          <div
-                            className={styles.riskBadge}
-                            style={{ background: riskColors[a.riskLevel] }}
-                          >
-                            {a.riskLevel}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className={styles.sublist}>
-                      <h3>Top usuarios (anonimizados)</h3>
-                      {topUsersForSelectedBuilding.length === 0 && (
-                        <div style={{ color: "var(--neutral-500)" }}>Sin datos</div>
-                      )}
-                      {topUsersForSelectedBuilding.map((u) => (
-                        <div key={u.usuario_alias} className={styles.row}>
-                          <div className={styles.rowLeft}>
-                            <div className={styles.rowTitle}>{u.usuario_alias}</div>
-                            <div className={styles.rowMeta}>
-                              Negativas: {(u.probability * 100).toFixed(0)}%
-                            </div>
-                          </div>
-                          <div
-                            className={styles.riskBadge}
-                            style={{ background: riskColors[u.riskLevel] }}
-                          >
-                            {u.riskLevel}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </>
-          )}
-        </div>
+
+                {/* GRÁFICA */}
+                <RiskChart
+                  historico={predData.historico}
+                  prediccion={predData.prediccion}
+                  media={stats?.media || null}
+                />
+              </>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
