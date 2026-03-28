@@ -1284,3 +1284,26 @@ footer {
     transform: translateX(0);
   }
 }
+
+/* ===========================
+   THEME: DARK MODE
+   =========================== */
+
+:root[data-theme="dark"] {
+  --neutral-50: #0b0f14;
+  --neutral-100: #111827;
+  --neutral-300: #374151;
+  --neutral-500: #9ca3af;
+  --neutral-600: #d1d5db;
+  --neutral-900: #f9fafb;
+
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.6);
+}
+
+/* ===========================
+   FONT SCALE GLOBAL
+   =========================== */
+
+html {
+  font-size: calc(16px * var(--font-scale, 1));
+}

@@ -5,7 +5,6 @@ import { entrenarModelo } from "@/lib/ml";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-
     const { edificio_id, respuestas } = body;
 
     if (!edificio_id || !respuestas) {
@@ -28,6 +27,9 @@ export async function POST(req: Request) {
       }
     }
 
+    // =========================
+    // 🔹 GUARDAR RESPUESTA
+    // =========================
     const nueva = await prisma.respuesta.create({
       data: {
         edificio_id,
@@ -35,12 +37,46 @@ export async function POST(req: Request) {
       },
     });
 
-    await entrenarModelo(edificio_id);
+    // =========================
+    // 🔹 OBTENER HISTÓRICO
+    // =========================
+    const respuestasDB = await prisma.respuesta.findMany({
+      where: { edificio_id },
+      orderBy: { fecha: "asc" },
+    });
+
+    const map: Record<string, number> = {
+      "muy mal": 1,
+      "mal": 2,
+      "regular": 3,
+      "bien": 4,
+      "muy bien": 5,
+    };
+
+    const valores = respuestasDB.map((r) => {
+      let val: any = null;
+
+      if (r.respuestas && typeof r.respuestas === "object") {
+        val = Object.values(r.respuestas)[0];
+      } else {
+        val = r.respuestas;
+      }
+
+      return map[String(val).toLowerCase()] ?? 3;
+    });
+
+    // =========================
+    // 🔹 ENTRENAR
+    // =========================
+    if (valores.length >= 2) {
+      await entrenarModelo(valores);
+    }
 
     return NextResponse.json(nueva);
 
   } catch (error) {
     console.error(error);
+
     return NextResponse.json(
       { error: "Error en POST" },
       { status: 500 }

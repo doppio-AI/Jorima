@@ -40,6 +40,34 @@ function crearModelo() {
 }
 
 // =========================
+// 🔹 MAPEO GLOBAL
+// =========================
+const mapValores: Record<string, number> = {
+  "muy mal": 1,
+  "mal": 2,
+  "regular": 3,
+  "bien": 4,
+  "muy bien": 5,
+};
+
+// =========================
+// 🔹 NORMALIZAR RESPUESTAS
+// =========================
+function normalizarRespuestas(respuestas: any[]) {
+  return respuestas.map((r) => {
+    let val: any = null;
+
+    if (r.respuestas && typeof r.respuestas === "object") {
+      val = Object.values(r.respuestas)[0];
+    } else {
+      val = r.respuestas;
+    }
+
+    return mapValores[String(val).toLowerCase()] ?? 3;
+  });
+}
+
+// =========================
 // 🔹 ESTADÍSTICA
 // =========================
 function calcularEstadisticas(data: number[]) {
@@ -52,7 +80,6 @@ function calcularEstadisticas(data: number[]) {
 
   const desviacion = Math.sqrt(varianza);
 
-  // 🔥 tendencia (regresión lineal simple)
   const x = data.map((_, i) => i);
 
   const xMean = x.reduce((a, b) => a + b, 0) / n;
@@ -67,7 +94,7 @@ function calcularEstadisticas(data: number[]) {
     0
   );
 
-  const pendiente = numerador / denominador;
+  const pendiente = denominador === 0 ? 0 : numerador / denominador;
 
   return {
     media,
@@ -78,9 +105,11 @@ function calcularEstadisticas(data: number[]) {
 }
 
 // =========================
-// 🔹 ENTRENAR
+// 🔹 ENTRENAR (EXPORTADO)
 // =========================
-async function entrenarModelo(data: number[]) {
+export async function entrenarModelo(data: number[]) {
+  if (!data || data.length < 2) return;
+
   modelo = crearModelo();
 
   const xs = tf.tensor2d(data.map((_, i) => [i]));
@@ -96,10 +125,9 @@ async function entrenarModelo(data: number[]) {
 }
 
 // =========================
-// 🔹 PROBABILIDAD DE RIESGO
+// 🔹 PROBABILIDAD
 // =========================
 function calcularProbabilidad(media: number) {
-  // escala 1–5 → 0–1
   return (media - 1) / 4;
 }
 
@@ -124,41 +152,25 @@ export async function predecir(edificio_id: number) {
 
     const { prisma } = await import("@/lib/prisma");
 
-    const respuestas = await prisma.respuesta.findMany({
+    const respuestasDB = await prisma.respuesta.findMany({
       where: { edificio_id: Number(edificio_id) },
       orderBy: { fecha: "asc" },
     });
 
-    if (!respuestas || respuestas.length < 2) {
+    if (!respuestasDB || respuestasDB.length < 2) {
       return {
         historico: [],
         prediccion: 0,
         estadisticas: null,
+        probabilidad: 0,
+        riesgo: "sin datos",
       };
     }
 
     // =========================
-    // 🔹 MAPEO
+    // 🔹 NORMALIZAR
     // =========================
-    const valores = respuestas.map((r) => {
-      let val: any = null;
-
-      if (r.respuestas && typeof r.respuestas === "object") {
-        val = Object.values(r.respuestas)[0];
-      } else {
-        val = r.respuestas;
-      }
-
-      const map: Record<string, number> = {
-        "muy mal": 1,
-        "mal": 2,
-        "regular": 3,
-        "bien": 4,
-        "muy bien": 5,
-      };
-
-      return map[val] ?? 3;
-    });
+    const valores = normalizarRespuestas(respuestasDB);
 
     // =========================
     // 🔹 ESTADÍSTICA
@@ -170,22 +182,28 @@ export async function predecir(edificio_id: number) {
     // =========================
     await entrenarModelo(valores);
 
-    const nextX = tf.tensor2d([[valores.length]]);
-    const pred = modelo!.predict(nextX) as tf.Tensor;
+    if (!modelo) throw new Error("Modelo no inicializado");
 
-    const prediccion = (await pred.data())[0];
+    const nextX = tf.tensor2d([[valores.length]]);
+    const pred = modelo.predict(nextX) as tf.Tensor;
+
+    const prediccionRaw = (await pred.data())[0];
 
     nextX.dispose();
     pred.dispose();
 
-    const probabilidad = calcularProbabilidad(stats.media);
+    const prediccion = Number(prediccionRaw.toFixed(2));
+
+    const probabilidad = Number(
+      calcularProbabilidad(stats.media).toFixed(2)
+    );
 
     const riesgo = nivelRiesgo(prediccion);
 
     return {
       historico: valores,
 
-      prediccion: Number(prediccion.toFixed(2)),
+      prediccion,
 
       estadisticas: {
         media: Number(stats.media.toFixed(2)),
@@ -194,7 +212,7 @@ export async function predecir(edificio_id: number) {
         tendencia: Number(stats.pendiente.toFixed(3)),
       },
 
-      probabilidad: Number(probabilidad.toFixed(2)),
+      probabilidad,
 
       riesgo,
     };
@@ -205,6 +223,8 @@ export async function predecir(edificio_id: number) {
       historico: [],
       prediccion: 0,
       estadisticas: null,
+      probabilidad: 0,
+      riesgo: "error",
     };
   }
 }
