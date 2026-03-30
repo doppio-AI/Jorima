@@ -14,7 +14,7 @@ import ThemedText from "@/components/ThemedText";
 import ThemedInput from "@/components/ThemedInput";
 import ThemedButton from "@/components/ThemedButton";
 
-const API_URL = "http://10.13.3.228:3000"; // cámbiala por tu IP real
+import { API_URL } from "../../config/api";
 
 export default function LoginScreen() {
   const [correo, setCorreo] = useState("");

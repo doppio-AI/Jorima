@@ -15,8 +15,8 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { COLORS, SIZES } from "@/constants/theme";
 import ThemedText from "@/components/ThemedText";
 import ThemedButton from "@/components/ThemedButton";
+import { API_URL } from "@/config/api";
 
-const API_URL = "http://10.13.3.228:3000"; // cámbiala por tu IP real
 
 type Usuario = {
   id?: number;
@@ -34,7 +34,7 @@ type Message = {
 
 type ChatResponse = {
   conversacion_id: number;
-  respuesta: string;
+  respuestas: string;
 };
 
 export default function HomeScreen() {
@@ -42,6 +42,8 @@ export default function HomeScreen() {
   const [checkingSession, setCheckingSession] = useState(true);
 
   const [mood, setMood] = useState<string | null>(null);
+  const [sendingMood, setSendingMood] = useState(false);
+  const [moodSaved, setMoodSaved] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -98,6 +100,44 @@ export default function HomeScreen() {
     }, 120);
   };
 
+  const saveMood = async (selectedMood: string) => {
+    if (!usuario?.edificio_id) {
+      Alert.alert("Error", "No se encontró el edificio del usuario.");
+      return;
+    }
+
+    try {
+      setSendingMood(true);
+      setMoodSaved(false);
+
+      const res = await fetch(`${API_URL}/api/respuesta`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          edificio_id: usuario.edificio_id,
+          respuestas: {
+            estado_animo: selectedMood,
+          },
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        Alert.alert("Error", data.error || "No se pudo guardar la respuesta.");
+        return;
+      }
+
+      setMoodSaved(true);
+    } catch (error) {
+      Alert.alert("Error", "No se pudo conectar con el servidor.");
+    } finally {
+      setSendingMood(false);
+    }
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || loading || !usuario?.id) return;
 
@@ -146,7 +186,7 @@ export default function HomeScreen() {
         {
           role: "assistant",
           text:
-            chatData.respuesta ||
+            chatData.respuestas ||
             "Lo siento, no pude generar una respuesta en este momento.",
         },
       ]);
@@ -247,7 +287,11 @@ export default function HomeScreen() {
                     styles.moodOption,
                     selected && styles.moodOptionSelected,
                   ]}
-                  onPress={() => setMood(item.value)}
+                  onPress={async () => {
+                    setMood(item.value);
+                    await saveMood(item.value);
+                  }}
+                  disabled={sendingMood}
                 >
                   <MaterialCommunityIcons
                     name={item.icon as any}
@@ -267,7 +311,15 @@ export default function HomeScreen() {
             })}
           </View>
 
-          {mood && (
+          {sendingMood && (
+            <View style={styles.thanksBox}>
+              <ThemedText variant="bodySmall" color={COLORS.textSecondary}>
+                Guardando respuesta...
+              </ThemedText>
+            </View>
+          )}
+
+          {!sendingMood && moodSaved && (
             <View style={styles.thanksBox}>
               <ThemedText variant="bodySmall" color={COLORS.secondary}>
                 ✓ Gracias por compartir cómo te sientes
