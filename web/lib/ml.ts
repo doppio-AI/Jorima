@@ -2,16 +2,10 @@ import * as tf from "@tensorflow/tfjs";
 
 let modelo: tf.Sequential | null = null;
 
-// =========================
-// 🔹 LIMPIAR TF
-// =========================
 function resetTF() {
   tf.engine().disposeVariables();
 }
 
-// =========================
-// 🔹 CREAR MODELO
-// =========================
 function crearModelo() {
   resetTF();
 
@@ -39,9 +33,6 @@ function crearModelo() {
   return model;
 }
 
-// =========================
-// 🔹 MAPEO GLOBAL
-// =========================
 const mapValores: Record<string, number> = {
   "muy mal": 1,
   "mal": 2,
@@ -50,9 +41,6 @@ const mapValores: Record<string, number> = {
   "muy bien": 5,
 };
 
-// =========================
-// 🔹 NORMALIZAR RESPUESTAS
-// =========================
 function normalizarRespuestas(respuestas: any[]) {
   return respuestas.map((r) => {
     let val: any = null;
@@ -67,9 +55,6 @@ function normalizarRespuestas(respuestas: any[]) {
   });
 }
 
-// =========================
-// 🔹 ESTADÍSTICA
-// =========================
 function calcularEstadisticas(data: number[]) {
   const n = data.length;
 
@@ -104,9 +89,6 @@ function calcularEstadisticas(data: number[]) {
   };
 }
 
-// =========================
-// 🔹 ENTRENAR (EXPORTADO)
-// =========================
 export async function entrenarModelo(data: number[]) {
   if (!data || data.length < 2) return;
 
@@ -124,16 +106,10 @@ export async function entrenarModelo(data: number[]) {
   ys.dispose();
 }
 
-// =========================
-// 🔹 PROBABILIDAD
-// =========================
 function calcularProbabilidad(media: number) {
   return (media - 1) / 4;
 }
 
-// =========================
-// 🔹 NIVEL DE RIESGO
-// =========================
 function nivelRiesgo(valor: number) {
   if (valor < 2) return "crítico";
   if (valor < 3) return "alto";
@@ -141,9 +117,6 @@ function nivelRiesgo(valor: number) {
   return "bajo";
 }
 
-// =========================
-// 🔹 PREDICCIÓN COMPLETA
-// =========================
 export async function predecir(edificio_id: number) {
   try {
     if (!edificio_id || isNaN(edificio_id)) {
@@ -167,19 +140,10 @@ export async function predecir(edificio_id: number) {
       };
     }
 
-    // =========================
-    // 🔹 NORMALIZAR
-    // =========================
     const valores = normalizarRespuestas(respuestasDB);
 
-    // =========================
-    // 🔹 ESTADÍSTICA
-    // =========================
     const stats = calcularEstadisticas(valores);
 
-    // =========================
-    // 🔹 ENTRENAR
-    // =========================
     await entrenarModelo(valores);
 
     if (!modelo) throw new Error("Modelo no inicializado");
