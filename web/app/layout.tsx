@@ -1,5 +1,12 @@
 import "./globals.css";
 import ThemeFontControls from "@/app/components/ThemeFontControls";
+import { Inter } from "next/font/google";
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata = {
   title: "Jorima",
@@ -12,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <head>
         <link
           rel="stylesheet"
@@ -37,7 +44,7 @@ export default function RootLayout({
         />
       </head>
 
-      <body>
+      <body className={inter.variable}>
         {children}
 
         {/* Panel flotante */}

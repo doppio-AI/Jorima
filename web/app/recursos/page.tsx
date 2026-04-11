@@ -10,11 +10,6 @@ import {
   FiLogOut,
   FiSmile,
   FiUser,
-  FiPhone,
-  FiMail,
-  FiMapPin,
-  FiClock as FiHorario,
-  FiAlertTriangle,
 } from "react-icons/fi";
 
 type Usuario = {
@@ -23,10 +18,20 @@ type Usuario = {
   correo?: string;
 };
 
+type HelpContent = {
+  id: number;
+  hash: string;
+  categoria: string;
+  descripcion: string;
+};
+
 export default function RecursosPage() {
 
   const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [helpContent, setHelpContent] = useState<HelpContent[]>([]);
+  const [loadingHelp, setLoadingHelp] = useState(true);
+  const [helpError, setHelpError] = useState<string | null>(null);
 
   /* =========================
      VALIDAR SESIÓN
@@ -78,13 +83,46 @@ export default function RecursosPage() {
     checkSession();
   }, [router]);
 
+  useEffect(() => {
+    const loadHelpContent = async () => {
+      try {
+        setLoadingHelp(true);
+        setHelpError(null);
+        const res = await fetch("/api/contenido-ayuda", { cache: "no-store" });
+        if (!res.ok) throw new Error("No se pudo cargar el contenido de ayuda");
+
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error("Formato inválido de respuesta");
+
+        const mapped = data.map((item: any) => ({
+          id: item.reporte_id,
+          hash: item.hash,
+          categoria: item.tipo_seguimiento || "General",
+          descripcion: item.notas || "Sin descripción",
+        }));
+
+        setHelpContent(mapped);
+      } catch (error) {
+        setHelpError(error instanceof Error ? error.message : "Error cargando recursos");
+      } finally {
+        setLoadingHelp(false);
+      }
+    };
+
+    loadHelpContent();
+  }, []);
+
   /* =========================
      LOGOUT
   ========================= */
 
   const logout = async () => {
     try {
-      await fetch("/api/login", { method: "DELETE" });
+      await fetch("/api/login", {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       document.cookie =
         "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       window.location.href = "/";
@@ -143,132 +181,59 @@ export default function RecursosPage() {
         </div>
 
         <div className="recursos-container">
-
-          {/* CARD PRINCIPAL - DEPARTAMENTO */}
-          <div className="recursos-card-principal">
-
-            <div className="recursos-card-header">
-              <h3>Departamento de Bienestar Psicológico</h3>
-            </div>
-
-            <div className="recursos-card-body">
-
-              {/* INFO DE LA PSICÓLOGA */}
-              <div className="recursos-profesional">
-                <div className="recursos-avatar">
-                  <FiUser size={28} />
-                </div>
-                <div className="recursos-profesional-info">
-                  <strong>Dra. María Elena Rodríguez</strong>
-                  <span>Psicóloga Clínica - Especialista en Bienestar Laboral y Organizacional</span>
-                  <span>Colegiatura Profesional: PSI-12345</span>
-                </div>
-              </div>
-
-              {/* GRID DE CONTACTO */}
-              <div className="recursos-grid">
-
-                <div className="recursos-dato">
-                  <div className="recursos-dato-icon">
-                    <FiPhone size={20} />
-                  </div>
-                  <div>
-                    <strong>Teléfono</strong>
-                    <span>+52 (442) 123-4567</span>
-                    <span>Ext. 3456</span>
-                  </div>
-                </div>
-
-                <div className="recursos-dato">
-                  <div className="recursos-dato-icon">
-                    <FiMail size={20} />
-                  </div>
-                  <div>
-                    <strong>Correo Electrónico</strong>
-                    <span>bienestar.psicologico@uteq.edu.mx</span>
-                  </div>
-                </div>
-
-                <div className="recursos-dato">
-                  <div className="recursos-dato-icon">
-                    <FiMapPin size={20} />
-                  </div>
-                  <div>
-                    <strong>Ubicación</strong>
-                    <span>Edificio Administrativo, 2do Piso</span>
-                    <span>Oficina 205 - Campus Central</span>
-                  </div>
-                </div>
-
-                <div className="recursos-dato">
-                  <div className="recursos-dato-icon">
-                    <FiHorario size={20} />
-                  </div>
-                  <div>
-                    <strong>Horario de Atención</strong>
-                    <span>Lunes a Viernes</span>
-                    <span>8:00 AM - 5:00 PM</span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* BOTÓN CITA */}
-              <button className="recursos-btn-cita">
-                Solicitar Cita Presencial
-              </button>
-
-            </div>
-
-          </div>
-
-          {/* CARD INFO IMPORTANTE */}
           <div className="recursos-card-info">
+            <strong>Guías Emocionales y Contenido de Ayuda</strong>
+            <p style={{ marginTop: 10, color: "var(--neutral-600)" }}>
+              Consulta material recomendado por administración para gestionar emociones,
+              fortalecer hábitos saludables y mejorar tu bienestar diario.
+            </p>
 
-            <strong>Información Importante</strong>
-
-            <div className="recursos-lista">
-              <div className="recursos-lista-item">
-                <span className="recursos-bullet">•</span>
-                <p>Todas las consultas son estrictamente confidenciales</p>
+            {loadingHelp ? (
+              <p style={{ marginTop: 12, color: "var(--neutral-500)" }}>Cargando recursos...</p>
+            ) : helpError ? (
+              <p style={{ marginTop: 12, color: "#DC2626" }}>{helpError}</p>
+            ) : helpContent.length === 0 ? (
+              <p style={{ marginTop: 12, color: "var(--neutral-500)" }}>
+                Aún no hay contenido publicado por administración.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+                {helpContent.map((doc) => (
+                  <div
+                    key={doc.id}
+                    style={{
+                      border: "1px solid var(--neutral-300)",
+                      borderRadius: 10,
+                      padding: 12,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    <strong>{doc.categoria}</strong>
+                    <span style={{ fontSize: "0.9rem" }}>{doc.descripcion}</span>
+                    <div className="admin-actions" style={{ marginTop: 4 }}>
+                      <a
+                        className="btn-primary"
+                        href={`/api/contenido-ayuda/${doc.hash}/preview`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: "none", textAlign: "center", fontSize: "0.85rem" }}
+                      >
+                        Ver
+                      </a>
+                      <a
+                        className="btn-volver"
+                        href={`/api/contenido-ayuda/${doc.hash}/download`}
+                        style={{ textDecoration: "none", textAlign: "center", fontSize: "0.85rem" }}
+                      >
+                        Descargar
+                      </a>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="recursos-lista-item">
-                <span className="recursos-bullet">•</span>
-                <p>Las citas pueden ser presenciales o virtuales según tu preferencia</p>
-              </div>
-              <div className="recursos-lista-item">
-                <span className="recursos-bullet">•</span>
-                <p>El servicio es gratuito para todos los colaboradores universitarios</p>
-              </div>
-              <div className="recursos-lista-item">
-                <span className="recursos-bullet">•</span>
-                <p>Se recomienda agendar cita con al menos 48 horas de anticipación</p>
-              </div>
-            </div>
-
-          </div>
-
-          {/* CARD EMERGENCIA */}
-          <div className="recursos-card-emergencia">
-
-            <div className="recursos-emergencia-header">
-              <FiAlertTriangle size={20} />
-              <strong>En Caso de Emergencia</strong>
-            </div>
-
-            <p>Si te encuentras en una situación de crisis o emergencia, contacta inmediatamente:</p>
-
-            <div className="recursos-emergencia-contactos">
-              <div className="recursos-emergencia-item">
-                <FiPhone size={16} />
-                <span>Línea de Crisis 24/7: <strong>800-911-2000</strong></span>
-              </div>
-              <div className="recursos-emergencia-item">
-                <FiPhone size={16} />
-                <span>Emergencias Universitarias: <strong>Ext. 911</strong></span>
-              </div>
-            </div>
-
+            )}
           </div>
 
         </div>
