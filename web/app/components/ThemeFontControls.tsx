@@ -8,8 +8,16 @@ const STORAGE_THEME = "jorima_theme";
 const STORAGE_FONT_SCALE = "jorima_font_scale";
 
 export default function ThemeFontControls() {
-  const [theme, setTheme] = useState<Theme>("light");
-  const [fontScale, setFontScale] = useState<number>(1);
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "light";
+    const storedTheme = localStorage.getItem(STORAGE_THEME) as Theme | null;
+    return storedTheme === "dark" ? "dark" : "light";
+  });
+  const [fontScale, setFontScale] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    const storedScale = Number(localStorage.getItem(STORAGE_FONT_SCALE) ?? 1);
+    return clamp(storedScale, 0.85, 1.25);
+  });
 
   const panelStyle = useMemo(
     () => ({
@@ -33,23 +41,13 @@ export default function ThemeFontControls() {
 
   useEffect(() => {
     try {
-      const storedTheme =
-        (localStorage.getItem(STORAGE_THEME) as Theme | null) ?? "light";
-
-      const storedScale = Number(localStorage.getItem(STORAGE_FONT_SCALE) ?? 1);
-
-      const safeScale = clamp(storedScale, 0.85, 1.25);
-
-      setTheme(storedTheme);
-      setFontScale(safeScale);
-
-      document.documentElement.dataset.theme = storedTheme;
+      document.documentElement.dataset.theme = theme;
       document.documentElement.style.setProperty(
         "--font-scale",
-        String(safeScale)
+        String(fontScale)
       );
     } catch {}
-  }, []);
+  }, [theme, fontScale]);
 
   const applyThemeAndScale = (nextTheme: Theme, nextScale: number) => {
     setTheme(nextTheme);

@@ -248,7 +248,11 @@ export default function UsuariosPage() {
 
   const logout = async () => {
     try {
-      await fetch("/api/login", { method: "DELETE" });
+      await fetch("/api/login", {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       document.cookie =
         "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       window.location.href = "/";

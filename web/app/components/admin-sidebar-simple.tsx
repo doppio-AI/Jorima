@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FiLogOut } from "react-icons/fi";
 import { useRouter } from "next/navigation";
 
-type AdminSection = "usuarios" | "ambiente" | "reportes";
+type AdminSection = "usuarios" | "ambiente" | "ayuda";
 
 interface AdminSidebarProps {
   active: AdminSection;
@@ -16,22 +16,25 @@ export default function AdminSidebarSimple({ active, onLogout }: AdminSidebarPro
 
   const handleLogout = async () => {
     if (onLogout) {
-      // Usar la función pasada desde el parent
       onLogout();
       return;
     }
 
     try {
-      // Logout por defecto
-      const response = await fetch("/api/auth/login", { method: "DELETE" });
+      const response = await fetch("/api/login", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
 
-      if (response.ok) {
-        localStorage.removeItem("user-data");
-        router.push("/login");
-        router.refresh();
-      } else {
+      if (!response.ok) {
         console.error("Error al cerrar sesión");
       }
+
+      document.cookie =
+        "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      localStorage.removeItem("user-data");
+      router.push("/");
+      router.refresh();
     } catch (error) {
       console.error("Error de red:", error);
     }
@@ -41,35 +44,31 @@ export default function AdminSidebarSimple({ active, onLogout }: AdminSidebarPro
     `sidebar-link ${active === section ? "active" : ""}`.trim();
 
   return (
-    <aside className="sidebar">
-      <div>
-        <div className="sidebar-logo">Admin</div>
-        <nav>
+    <aside className="sidebar admin-sidebar">
+      <div className="admin-sidebar-shell">
+        <div className="sidebar-logo admin-sidebar-brand">
+          <div>
+            <span className="admin-sidebar-eyebrow">Panel</span>
+            <strong className="admin-sidebar-title">Administración</strong>
+          </div>
+        </div>
+
+        <nav className="admin-sidebar-nav">
           <Link className={getLinkClass("usuarios")} href="/administrador">
             Usuarios
           </Link>
           <Link className={getLinkClass("ambiente")} href="/administrador/ambiente">
             Ambiente laboral
           </Link>
-          <Link className={getLinkClass("reportes")} href="/administrador/reportes">
-            Reportes
+          <Link className={getLinkClass("ayuda")} href="/administrador/ayuda">
+            Ayuda y guías
           </Link>
         </nav>
       </div>
 
       <button 
-        className="logout-button" 
-        onClick={handleLogout} 
-        style={{ 
-          color: 'white', 
-          background: 'none', 
-          border: 'none', 
-          cursor: 'pointer', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '8px',
-          marginTop: '20px' 
-        }}
+        className="admin-logout-button"
+        onClick={handleLogout}
       >
         <FiLogOut size={20} />
         <span>Cerrar Sesión</span>

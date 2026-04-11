@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs"; // Librería para comparar contraseñas cifradas
-import crypto from "crypto"; // Librería de Node para operaciones criptográficas
-import { getKeys } from "@/lib/rsa"; // Función que obtiene las claves RSA del servidor
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { getKeys } from "@/lib/rsa";
 
 export async function POST(request: Request) {
 
   try {
-
     const body = await request.json();
 
     const { encryptedData, encryptedKey, iv } = body;
@@ -135,13 +134,15 @@ export async function DELETE() {
   response.cookies.set("usuario", "", {
     httpOnly: true,
     path: "/",
-    maxAge: 0, // Expira inmediatamente
+    maxAge: 0,
+    expires: new Date(0),
   });
 
   // Borrar cookie pública
   response.cookies.set("usuario_public", "", {
     path: "/",
-    maxAge: 0, // Expira inmediatamente
+    maxAge: 0,
+    expires: new Date(0),
   });
 
   return response;
