@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminSidebarSimple from "@/app/components/admin-sidebar-simple";
-import AdminStats from "@/app/components/admin-stats";
-import { FiLogOut } from "react-icons/fi"; 
 
 interface Usuario {
   id: number;
@@ -44,7 +42,6 @@ export default function AdminUsuarios() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [showStats, setShowStats] = useState(false);
 
   const [form, setForm] = useState<FormData>({
     nombre: "",
@@ -80,9 +77,17 @@ export default function AdminUsuarios() {
     fetchUsuarios();
   }, []);
 
-  const handleLogout = () => {
-    document.cookie = "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
-    router.push("/");
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/login", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+    } finally {
+      document.cookie = "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      router.push("/");
+      router.refresh();
+    }
   };
 
   const getRolTexto = (tipo: number) => (tipo === 1 ? "admin" : "usuario");
@@ -164,26 +169,20 @@ export default function AdminUsuarios() {
 
       <main className="dashboard-main">
         <div className="dashboard-header">
-          <div>
+          <div className="admin-page-intro">
             <h1>Gestión de Usuarios</h1>
-            <p style={{ color: "var(--neutral-500)", margin: 0 }}>
+            <p>
               Administra los usuarios del sistema
             </p>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div className="admin-toolbar">
             <button className="btn-primary" onClick={handleCreate}>
               + Nuevo usuario
             </button>
           </div>
         </div>
 
-        {showStats && (
-          <div style={{ marginBottom: 24 }}>
-            <AdminStats />
-          </div>
-        )}
-
-        <div className="filters" style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <div className="filters admin-filterbar">
           <input
             className="search-input"
             type="text"
@@ -228,15 +227,7 @@ export default function AdminUsuarios() {
                     <td>{u.correo}</td>
                     <td>
                       <span
-                        className="badge"
-                        style={{
-                          background: u.tipo_usuario === 1 ? "var(--color-azul-profundo)" : "var(--color-verde-turquesa)",
-                          color: "white",
-                          padding: "4px 10px",
-                          borderRadius: 999,
-                          fontSize: "0.8rem",
-                          fontWeight: 600,
-                        }}
+                        className={`admin-status-badge ${u.tipo_usuario === 1 ? "is-admin" : "is-user"}`}
                       >
                         {getRolTexto(u.tipo_usuario)}
                       </span>
@@ -244,7 +235,7 @@ export default function AdminUsuarios() {
                     <td>{u.edificio_id ?? "—"}</td>
                     <td>{u.turno || "—"}</td>
                     <td>
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div className="admin-actions">
                         <button
                           className="btn-volver"
                           style={{ padding: "6px 12px", fontSize: "0.85rem" }}
@@ -253,15 +244,7 @@ export default function AdminUsuarios() {
                           Editar
                         </button>
                         <button
-                          style={{
-                            padding: "6px 12px",
-                            fontSize: "0.85rem",
-                            background: "#DC2626",
-                            color: "white",
-                            border: "none",
-                            borderRadius: 8,
-                            cursor: "pointer",
-                          }}
+                          className="btn-danger"
                           onClick={() => { setSelectedUser(u); setDeleteOpen(true); }}
                         >
                           Eliminar
@@ -360,10 +343,10 @@ export default function AdminUsuarios() {
             <div className="modal-content">
               <h3>Confirmar eliminación</h3>
               <p>¿Estás seguro de que deseas eliminar a <strong>{selectedUser?.nombre}</strong>? Esta acción no se puede deshacer.</p>
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+              <div className="admin-actions" style={{ justifyContent: "flex-end", marginTop: 20 }}>
                 <button className="btn-volver" onClick={() => setDeleteOpen(false)}>Cancelar</button>
                 <button
-                  style={{ background: "#DC2626", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
+                  className="btn-danger"
                   onClick={handleDelete}
                 >
                   Eliminar

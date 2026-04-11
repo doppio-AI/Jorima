@@ -168,7 +168,7 @@ export default function HistorialPage() {
   const getConversationIcon = (count: number) => {
     if (count > 10) return <FiFrown size={22} style={{ color: "#e74c3c" }} />;
     if (count > 5) return <FiMeh size={22} style={{ color: "#f39c12" }} />;
-    return <FiSmile size={22} style={{ color: "#2A9D8F" }} />;
+    return <FiSmile size={22} style={{ color: "var(--color-verde-turquesa)" }} />;
   };
 
   /* =========================
@@ -177,7 +177,11 @@ export default function HistorialPage() {
 
   const logout = async () => {
     try {
-      await fetch("/api/login", { method: "DELETE" });
+      await fetch("/api/login", {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       document.cookie =
         "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       window.location.href = "/";
@@ -256,7 +260,7 @@ export default function HistorialPage() {
           {/* SIN CONVERSACIONES */}
           {!loading && conversaciones.length === 0 && (
             <div className="historial-empty">
-              <FiMessageCircle size={48} style={{ color: "#ccc" }} />
+              <FiMessageCircle size={48} style={{ color: "var(--neutral-400)" }} />
               <p>Aún no tienes conversaciones registradas</p>
               <button
                 className="btn-primary"

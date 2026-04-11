@@ -11,6 +11,8 @@ import {
   FiSmile,
   FiUser,
   FiMail,
+  FiSave,
+  FiLock,
   FiClock as FiTurno,
   FiCalendar,
   FiMapPin,
@@ -34,6 +36,17 @@ export default function PerfilPage() {
 
   const router = useRouter();
   const [usuario, setUsuario] = useState<UsuarioCompleto | null>(null);
+  const [formData, setFormData] = useState({
+    nombre: "",
+    apellido_paterno: "",
+    apellido_materno: "",
+    turno: "",
+    contrasena: "",
+    confirmarContrasena: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   /* =========================
@@ -74,6 +87,14 @@ export default function PerfilPage() {
 
         const data = await res.json();
         setUsuario(data);
+        setFormData({
+          nombre: data.nombre || "",
+          apellido_paterno: data.apellido_paterno || "",
+          apellido_materno: data.apellido_materno || "",
+          turno: data.turno || "",
+          contrasena: "",
+          confirmarContrasena: "",
+        });
       } catch (error) {
         router.push("/");
       } finally {
@@ -119,7 +140,11 @@ export default function PerfilPage() {
 
   const logout = async () => {
     try {
-      await fetch("/api/login", { method: "DELETE" });
+      await fetch("/api/login", {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       document.cookie =
         "usuario_public=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       window.location.href = "/";
@@ -131,6 +156,83 @@ export default function PerfilPage() {
   const nombreCompleto = usuario
     ? `${usuario.nombre} ${usuario.apellido_paterno} ${usuario.apellido_materno || ""}`.trim()
     : "";
+
+  const handleChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (message) setMessage(null);
+    if (errorMessage) setErrorMessage(null);
+  };
+
+  const handleSave = async () => {
+    if (!usuario?.usuario_id) return;
+
+    const nombre = formData.nombre.trim();
+    const apellidoPaterno = formData.apellido_paterno.trim();
+    const apellidoMaterno = formData.apellido_materno.trim();
+    const turno = formData.turno.trim();
+
+    if (!nombre || !apellidoPaterno) {
+      setErrorMessage("Nombre y apellido paterno son obligatorios.");
+      return;
+    }
+
+    if (formData.contrasena && formData.contrasena !== formData.confirmarContrasena) {
+      setErrorMessage("La confirmación de contraseña no coincide.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+    setErrorMessage(null);
+
+    try {
+      const payload: Record<string, string> = {
+        nombre,
+        apellido_paterno: apellidoPaterno,
+        apellido_materno: apellidoMaterno,
+        turno,
+      };
+
+      if (formData.contrasena.trim()) {
+        payload.contrasena = formData.contrasena.trim();
+      }
+
+      const res = await fetch(`/api/usuarios/${usuario.usuario_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudieron actualizar tus datos.");
+      }
+
+      setUsuario((prev) =>
+        prev
+          ? {
+              ...prev,
+              nombre: data.nombre,
+              apellido_paterno: data.apellido_paterno,
+              apellido_materno: data.apellido_materno,
+              turno: data.turno,
+            }
+          : prev,
+      );
+
+      setFormData((prev) => ({
+        ...prev,
+        contrasena: "",
+        confirmarContrasena: "",
+      }));
+
+      setMessage("Tu perfil se actualizó correctamente.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Ocurrió un error al guardar.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="dashboard-container">
@@ -259,6 +361,115 @@ export default function PerfilPage() {
                     </div>
                   </div>
 
+                </div>
+
+                {message ? <p className="perfil-message-ok">{message}</p> : null}
+                {errorMessage ? <p className="perfil-message-error">{errorMessage}</p> : null}
+
+                <div className="perfil-edit-modules">
+                  <div className="perfil-module">
+                    <h4>Modulo 1: Datos personales</h4>
+                    <div className="perfil-form-grid">
+                      <label className="perfil-field">
+                        <span>Nombre</span>
+                        <input
+                          value={formData.nombre}
+                          onChange={(e) => handleChange("nombre", e.target.value)}
+                          placeholder="Tu nombre"
+                        />
+                      </label>
+
+                      <label className="perfil-field">
+                        <span>Apellido paterno</span>
+                        <input
+                          value={formData.apellido_paterno}
+                          onChange={(e) => handleChange("apellido_paterno", e.target.value)}
+                          placeholder="Tu apellido paterno"
+                        />
+                      </label>
+
+                      <label className="perfil-field">
+                        <span>Apellido materno</span>
+                        <input
+                          value={formData.apellido_materno}
+                          onChange={(e) => handleChange("apellido_materno", e.target.value)}
+                          placeholder="Tu apellido materno"
+                        />
+                      </label>
+
+                      <label className="perfil-field">
+                        <span>Correo electrónico</span>
+                        <div className="perfil-readonly">
+                          <p>{usuario.correo}</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="perfil-module">
+                    <h4>Modulo 2: Configuración de cuenta</h4>
+                    <div className="perfil-form-grid">
+                      <label className="perfil-field">
+                        <span>Turno</span>
+                        <select
+                          value={formData.turno}
+                          onChange={(e) => handleChange("turno", e.target.value)}
+                        >
+                          <option value="">Selecciona un turno</option>
+                          <option value="Matutino">Matutino</option>
+                          <option value="Vespertino">Vespertino</option>
+                          <option value="Nocturno">Nocturno</option>
+                          <option value="Mixto">Mixto</option>
+                        </select>
+                      </label>
+
+                      <label className="perfil-field">
+                        <span>Nueva contraseña</span>
+                        <input
+                          type="password"
+                          value={formData.contrasena}
+                          onChange={(e) => handleChange("contrasena", e.target.value)}
+                          placeholder="Opcional"
+                        />
+                      </label>
+
+                      <label className="perfil-field">
+                        <span>Confirmar contraseña</span>
+                        <input
+                          type="password"
+                          value={formData.confirmarContrasena}
+                          onChange={(e) => handleChange("confirmarContrasena", e.target.value)}
+                          placeholder="Repite la contraseña"
+                        />
+                      </label>
+
+                      <div className="perfil-field perfil-readonly">
+                        <span>Tipo de usuario</span>
+                        <p>{getTipoUsuario(usuario.tipo_usuario)}</p>
+                      </div>
+
+                      <div className="perfil-field perfil-readonly">
+                        <span>Edificio</span>
+                        <p>{usuario.edificio?.nombre || "No asignado"}</p>
+                      </div>
+
+                      <div className="perfil-field perfil-readonly">
+                        <span>Fecha de ingreso</span>
+                        <p>{formatDate(usuario.fecha_registro)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="perfil-actions">
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                    <FiSave size={16} />
+                    {saving ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                  <p className="perfil-actions-note">
+                    <FiLock size={14} />
+                    Tu contraseña se guarda cifrada.
+                  </p>
                 </div>
 
               </div>

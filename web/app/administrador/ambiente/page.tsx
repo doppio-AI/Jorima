@@ -24,7 +24,30 @@ type RiskApiResponse = {
 
 type PredData = {
   historico: number[];
-  prediccion: number | null;
+  prediccion: number;
+  probabilidad: number;
+  riesgo: string;
+  alerta: boolean;
+  estadisticas: {
+    media: number;
+    varianza: number;
+    desviacion: number;
+    pendiente: number;
+    tendencia: "subiendo" | "bajando" | "estable";
+    muestra: number;
+    mae: number;
+    rmse: number;
+    confianza: number;
+  } | null;
+  interpretacion: {
+    resumen: string;
+    recomendaciones: string[];
+    factores: {
+      tendencia: number;
+      volatilidad: number;
+      consistencia: number;
+    };
+  } | null;
 };
 
 const riskColors: Record<RiskLevel, string> = {
@@ -40,9 +63,6 @@ export default function AmbienteDashboardPage() {
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // =========================
-  // CARGAR EDIFICIOS
-  // =========================
   useEffect(() => {
     const load = async () => {
       try {
@@ -50,7 +70,6 @@ export default function AmbienteDashboardPage() {
         const json = await res.json();
 
         const safeBuildings: BuildingRisk[] = json?.buildings || [];
-
         setData({ buildings: safeBuildings });
 
         if (safeBuildings.length > 0) {
@@ -64,12 +83,9 @@ export default function AmbienteDashboardPage() {
       }
     };
 
-    load();
+    void load();
   }, []);
 
-  // =========================
-  // CARGAR PREDICCIÓN
-  // =========================
   useEffect(() => {
     if (!selectedBuildingId) return;
 
@@ -80,58 +96,38 @@ export default function AmbienteDashboardPage() {
 
         setPredData({
           historico: json?.historico || [],
-          prediccion: typeof json?.prediccion === "number" ? json.prediccion : null,
+          prediccion: typeof json?.prediccion === "number" ? json.prediccion : 0,
+          probabilidad: typeof json?.probabilidad === "number" ? json.probabilidad : 0,
+          riesgo: json?.riesgo || "sin datos",
+          alerta: Boolean(json?.alerta),
+          estadisticas: json?.estadisticas || null,
+          interpretacion: json?.interpretacion || null,
         });
       } catch (error) {
         console.error("Error cargando predicción:", error);
         setPredData({
           historico: [],
-          prediccion: null,
+          prediccion: 0,
+          probabilidad: 0,
+          riesgo: "sin datos",
+          alerta: false,
+          estadisticas: null,
+          interpretacion: null,
         });
       }
     };
 
-    loadPrediction();
+    void loadPrediction();
   }, [selectedBuildingId]);
 
-  // =========================
-  // EDIFICIO SELECCIONADO
-  // =========================
   const selectedBuilding = useMemo(() => {
-    return data.buildings.find(
-      (b) => b.edificio_id === selectedBuildingId
-    );
+    return data.buildings.find((b) => b.edificio_id === selectedBuildingId);
   }, [data, selectedBuildingId]);
 
-  // =========================
-  // ESTADÍSTICA
-  // =========================
-  const stats = useMemo(() => {
-    if (!predData?.historico || predData.historico.length === 0) return null;
+  const recommendationPreview = predData?.interpretacion?.recomendaciones?.slice(0, 3) ?? [];
+  const remainingRecommendations =
+    (predData?.interpretacion?.recomendaciones?.length ?? 0) - recommendationPreview.length;
 
-    const data = predData.historico;
-    const n = data.length;
-
-    const media = data.reduce((a, b) => a + b, 0) / n;
-
-    const varianza =
-      data.reduce((acc, val) => acc + Math.pow(val - media, 2), 0) / n;
-
-    const desviacion = Math.sqrt(varianza);
-
-    const first = data[0];
-    const last = data[data.length - 1];
-
-    let tendencia: "subiendo" | "bajando" | "estable" = "estable";
-    if (last > first) tendencia = "subiendo";
-    if (last < first) tendencia = "bajando";
-
-    return { media, varianza, desviacion, tendencia, n };
-  }, [predData]);
-
-  // =========================
-  // LOADING
-  // =========================
   if (loading) {
     return <div style={{ padding: 40 }}>Cargando...</div>;
   }
@@ -142,167 +138,151 @@ export default function AmbienteDashboardPage() {
 
       <main className={styles.page}>
         <div className={styles.header}>
-          <h1>Matriz de Riesgo</h1>
-          <p>Monitoreo por edificio</p>
+          <h1>Ambiente Laboral Inteligente</h1>
+          <p>Panel de riesgo con interpretación de modelo neuronal</p>
         </div>
 
         {data.buildings.length === 0 && (
-          <div style={{ padding: 20, textAlign: "center", color: "#666" }}>
+          <div style={{ padding: 20, textAlign: "center", color: "var(--neutral-500)" }}>
             No hay edificios registrados
           </div>
         )}
 
-        {/* ========================= */}
-        {/* LISTA */}
-        {/* ========================= */}
         <div className={styles.grid}>
           {data.buildings.map((b) => {
-            const riskScore = b.riskScore ?? 0;
             const prob = b.neurona?.probabilidad ?? 0;
 
             return (
-              <div
+              <button
+                type="button"
                 key={b.edificio_id}
                 onClick={() => setSelectedBuildingId(b.edificio_id)}
-                className={`${styles.card} ${
-                  selectedBuildingId === b.edificio_id
-                    ? styles.cardSelected
-                    : ""
-                }`}
+                className={`${styles.card} ${selectedBuildingId === b.edificio_id ? styles.cardSelected : ""}`}
               >
                 <div className={styles.cardTop}>
-                  <span className={styles.buildingName}>
-                    {b.edificio_nombre || "Sin nombre"}
-                  </span>
-
-                  <span
-                    className={styles.riskBadge}
-                    style={{
-                      background: riskColors[b.riskLevel] || "#999",
-                    }}
-                  >
+                  <span className={styles.buildingName}>{b.edificio_nombre || "Sin nombre"}</span>
+                  <span className={styles.riskBadge} style={{ background: riskColors[b.riskLevel] || "#999" }}>
                     {b.riskLevel}
                   </span>
                 </div>
 
                 <div className={styles.metricRow}>
-                  <span>Riesgo</span>
-                  <span>{(riskScore * 100).toFixed(1)}%</span>
+                  <span className={styles.metricLabel}>Prob. alerta</span>
+                  <span className={styles.metricValue}>{(prob * 100).toFixed(1)}%</span>
                 </div>
-
-                <div className={styles.metricRow}>
-                  <span>Probabilidad</span>
-                  <span>{(prob * 100).toFixed(1)}%</span>
-                </div>
-              </div>
+              </button>
             );
           })}
         </div>
 
-        {/* ========================= */}
-        {/* DETALLE */}
-        {/* ========================= */}
         {selectedBuilding && (
           <div className={styles.details}>
-            <h2>{selectedBuilding.edificio_nombre}</h2>
+            <div className={styles.detailsTitle}>
+              <h2>{selectedBuilding.edificio_nombre}</h2>
+              {predData?.alerta && <span className={styles.alertBadge}>Alerta activa</span>}
+            </div>
 
             {!predData || predData.historico.length === 0 ? (
-              <div style={{ padding: 20, textAlign: "center", color: "#666" }}>
-                No hay datos suficientes
+              <div style={{ padding: 20, textAlign: "center", color: "var(--neutral-500)" }}>
+                No hay datos suficientes para entrenar el modelo
               </div>
             ) : (
               <>
-                <div className={styles.lists}>
-                  {/* ACTUAL */}
+                <div
+                  className={`${styles.lists} ${
+                    predData.estadisticas ? styles.listsWithStats : styles.listsNoStats
+                  }`}
+                >
                   <div className={styles.sublist}>
-                    <h3>Actual</h3>
-
+                    <h3>Resumen de riesgo</h3>
                     <div className={styles.row}>
-                      <span>Riesgo</span>
-                      <span>{(selectedBuilding.riskScore * 100).toFixed(1)}%</span>
+                      <span>Probabilidad actual</span>
+                      <span>{(selectedBuilding.neurona.probabilidad * 100).toFixed(1)}%</span>
                     </div>
-
                     <div className={styles.row}>
-                      <span>Probabilidad</span>
-                      <span>
-                        {(selectedBuilding.neurona.probabilidad * 100).toFixed(1)}%
-                      </span>
+                      <span>Nivel actual</span>
+                      <span className={styles.inlineBadge}>{selectedBuilding.riskLevel}</span>
                     </div>
-                  </div>
-
-                  {/* PREDICCIÓN */}
-                  <div className={styles.sublist}>
-                    <h3>Predicción</h3>
-
                     <div className={styles.row}>
-                      <span>Futuro</span>
-                      <span>
-                        {predData.prediccion !== null
-                          ? predData.prediccion.toFixed(2)
-                          : "Sin datos"}
-                      </span>
+                      <span>Siguiente ventana</span>
+                      <span>{predData.prediccion.toFixed(2)}</span>
+                    </div>
+                    <div className={styles.row}>
+                      <span>Riesgo proyectado</span>
+                      <span>{(predData.probabilidad * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className={styles.row}>
+                      <span>Nivel proyectado</span>
+                      <span className={styles.inlineBadge}>{predData.riesgo}</span>
                     </div>
                   </div>
 
-                  {/* ESTADÍSTICA */}
-                  <div className={styles.sublist}>
-                    <h3>Estadística</h3>
-
-                    {stats && (
-                      <>
-                        <div className={styles.row}>
-                          <span>Muestra</span>
-                          <span>{stats.n}</span>
-                        </div>
-
-                        <div className={styles.row}>
-                          <span>Media</span>
-                          <span>{stats.media.toFixed(2)}</span>
-                        </div>
-
-                        <div className={styles.row}>
-                          <span>Varianza</span>
-                          <span>{stats.varianza.toFixed(3)}</span>
-                        </div>
-
-                        <div className={styles.row}>
-                          <span>Desviación</span>
-                          <span>{stats.desviacion.toFixed(3)}</span>
-                        </div>
-
-                        <div className={styles.row}>
-                          <span>Tendencia</span>
-                          <span>{stats.tendencia}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* INTERPRETACIÓN */}
-                  <div className={styles.sublist}>
-                    <h3>Interpretación</h3>
-
-                    {stats && (
-                      <div style={{ fontSize: 14 }}>
-                        {stats.media > 3.5 && "Condiciones buenas. "}
-                        {stats.media <= 3.5 && stats.media > 2 && "Condiciones regulares. "}
-                        {stats.media <= 2 && "Condiciones críticas. "}
-
-                        {stats.desviacion > 1 && "Alta variabilidad. "}
-                        {stats.desviacion <= 1 && "Sistema estable. "}
-
-                        {stats.tendencia === "subiendo" && "Tendencia positiva."}
-                        {stats.tendencia === "bajando" && "Tendencia negativa."}
+                  {predData.estadisticas && (
+                    <div className={styles.sublist}>
+                      <h3>Calidad del modelo</h3>
+                      <div className={styles.row}>
+                        <span>Muestra</span>
+                        <span>{predData.estadisticas.muestra}</span>
                       </div>
-                    )}
-                  </div>
+                      <div className={styles.row}>
+                        <span>Media</span>
+                        <span>{predData.estadisticas.media.toFixed(2)}</span>
+                      </div>
+                      <div className={styles.row}>
+                        <span>Desviación</span>
+                        <span>{predData.estadisticas.desviacion.toFixed(3)}</span>
+                      </div>
+                      <div className={styles.row}>
+                        <span>Tendencia</span>
+                        <span>{predData.estadisticas.tendencia}</span>
+                      </div>
+                      <div className={styles.row}>
+                        <span>Confianza</span>
+                        <span>{(predData.estadisticas.confianza * 100).toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {predData.interpretacion && (
+                    <div className={`${styles.sublist} ${styles.interpretationCard}`}>
+                      <h3>Interpretación</h3>
+                      <div className={styles.interpretation}>
+                        <p>{predData.interpretacion.resumen}</p>
+
+                        <div className={styles.factorGrid}>
+                          <div className={styles.factorRow}>
+                            <span>Tendencia</span>
+                            <strong>{(predData.interpretacion.factores.tendencia * 100).toFixed(0)}%</strong>
+                          </div>
+                          <div className={styles.factorRow}>
+                            <span>Volatilidad</span>
+                            <strong>{(predData.interpretacion.factores.volatilidad * 100).toFixed(0)}%</strong>
+                          </div>
+                          <div className={styles.factorRow}>
+                            <span>Consistencia</span>
+                            <strong>{(predData.interpretacion.factores.consistencia * 100).toFixed(0)}%</strong>
+                          </div>
+                        </div>
+
+                        <ul className={styles.recommendationList}>
+                          {recommendationPreview.map((item, idx) => (
+                            <li key={`${selectedBuilding.edificio_id}-${idx}`}>{item}</li>
+                          ))}
+                        </ul>
+                        {remainingRecommendations > 0 && (
+                          <span className={styles.moreHint}>
+                            +{remainingRecommendations} recomendación(es) adicional(es)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* GRÁFICA */}
                 <RiskChart
                   historico={predData.historico}
                   prediccion={predData.prediccion}
-                  media={stats?.media || null}
+                  media={predData.estadisticas?.media || null}
                 />
               </>
             )}

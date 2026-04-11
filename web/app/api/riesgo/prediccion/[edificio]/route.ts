@@ -29,6 +29,11 @@ export async function GET(
       {
         historico: [],
         prediccion: 0,
+        estadisticas: null,
+        probabilidad: 0,
+        riesgo: "error",
+        alerta: false,
+        interpretacion: null,
       },
       { status: 500 }
     );
