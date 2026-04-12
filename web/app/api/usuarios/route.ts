@@ -12,8 +12,8 @@ export async function GET() {
 
     return NextResponse.json(usuarios);
   } catch (error: unknown) {
+    console.error("ERROR GET USUARIOS:", error);
     const mensaje =
-    console.error("ERROR REGISTRO:", error);
       error instanceof Error ? error.message : "Error desconocido";
 
     return NextResponse.json(
@@ -27,23 +27,26 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
+    console.log("BODY REGISTRO:", body);
+
     const passwordHash = await bcrypt.hash(body.contrasena, 10);
 
     const nuevoUsuario = await prisma.usuario.create({
       data: {
-        tipo_usuario: body.tipo_usuario,
+        tipo_usuario: Number(body.tipo_usuario),
         correo: body.correo,
         nombre: body.nombre,
         apellido_paterno: body.apellido_paterno,
         apellido_materno: body.apellido_materno,
         contrasena: passwordHash,
-        edificio_id: body.edificio_id,
+        edificio_id: Number(body.edificio_id),
         turno: body.turno,
       },
     });
 
     return NextResponse.json(nuevoUsuario);
   } catch (error: unknown) {
+    console.error("ERROR REGISTRO:", error);
     const mensaje =
       error instanceof Error ? error.message : "Error desconocido";
 
