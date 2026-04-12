@@ -270,8 +270,7 @@ export default function UsuariosPage() {
       <aside className="sidebar">
         <div>
           <div className="sidebar-logo">
-            <FiSmile size={28} />
-            <span>Jorima</span>
+            <img src="/logo.jpeg" alt="Jorima" style={{ width: "100%", maxWidth: "160px", height: "auto" }} />
           </div>
 
           <nav>
