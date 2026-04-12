@@ -12,8 +12,11 @@ export async function GET(request: Request) {
     }
 
     const usuario = await prisma.usuario.findUnique({
-      where: { usuario_id: Number(id) },
-    });
+          where: { usuario_id: Number(id) },
+          include: {
+            edificio: true,
+          },
+        });
 
     if (!usuario) {
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
