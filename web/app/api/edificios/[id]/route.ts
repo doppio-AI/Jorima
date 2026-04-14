@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
     const edificio = await prisma.edificio.findUnique({
       where: { edificio_id: id },
-      include: { usuario: true, encuesta: true },
+      include: { usuario: true, respuesta: true },
     });
     if (!edificio) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 

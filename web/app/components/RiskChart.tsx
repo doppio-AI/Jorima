@@ -16,12 +16,19 @@ type Props = {
   media: number | null;
 };
 
+type ChartPoint = {
+  tiempo: number;
+  real: number | null;
+  pred: number | null;
+  media: number | null;
+};
+
 export default function RiskChart({ historico, prediccion, media }: Props) {
   if (!historico || historico.length === 0) {
     return <div style={{ textAlign: "center" }}>Sin datos</div>;
   }
 
-  const data = historico.map((v, i) => ({
+  const data: ChartPoint[] = historico.map((v, i) => ({
     tiempo: i + 1,
     real: v,
     pred: null,

@@ -150,8 +150,8 @@ export async function DELETE(request: Request) {
 
 // --- GET individual para preview/download ---
 export async function getReportByHash(hash: string) {
-  const reporte = await prisma.reporte.findUnique({
-    where: { hash },
-  });
+const reporte = await prisma.reporte.findFirst({
+  where: { hash },
+});
   return reporte;
 }

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const edificios = await prisma.edificio.findMany({
-      include: { usuario: true, encuesta: true },
+      include: { usuario: true, respuesta: true },
     });
     return NextResponse.json(edificios);
   } catch (error: unknown) {
