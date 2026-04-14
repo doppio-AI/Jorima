@@ -64,6 +64,19 @@ function statusColor(estado: string) {
   return "#0f4c81";
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
 export default function ContenidoAyudaAdminPage() {
   const [rhId, setRhId] = useState<number | null>(null);
   const [docs, setDocs] = useState<HelpDoc[]>([]);
@@ -198,18 +211,31 @@ export default function ContenidoAyudaAdminPage() {
     setError(null);
 
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("rh_id", String(rhId));
-      fd.append("tipo_seguimiento", categoria);
-      fd.append("estado", "Publicado");
-      fd.append("notas", descripcion);
+      const fileBuffer = await file.arrayBuffer();
+      if (fileBuffer.byteLength <= 0) {
+        throw new Error(`No se pudo leer el archivo seleccionado. Nombre: ${file.name}, tipo: ${file.type || "sin tipo"}, tamano detectado: ${file.size}.`);
+      }
 
-      const res = await fetch("/api/contenido-ayuda", { method: "POST", body: fd });
+      const res = await fetch("/api/contenido-ayuda", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rh_id: rhId,
+          tipo_seguimiento: categoria,
+          estado: "Publicado",
+          notas: descripcion,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          fileBase64: arrayBufferToBase64(fileBuffer),
+        }),
+      });
 
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.error || "Error al subir archivo");
+        const debug = body?.debug
+          ? ` Archivo: ${body.debug.fileName || "sin nombre"}, tipo: ${body.debug.fileType || "sin tipo"}, tamano reportado: ${body.debug.reportedSize}, tamano leido: ${body.debug.bufferSize}.`
+          : "";
+        throw new Error((body?.error || "Error al subir archivo") + debug);
       }
 
       setFile(null);
@@ -246,6 +272,12 @@ export default function ContenidoAyudaAdminPage() {
               <div className="form-group">
                 <label>Archivo (PDF, imagen)</label>
                 <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={e => setFile(e.target.files?.[0] || null)} />
+                {file && (
+                  <div style={{ marginTop: 8, fontSize: "0.9rem", color: file.size > 0 ? "var(--neutral-700)" : "#B91C1C" }}>
+                    {file.name} · {formatFileSize(file.size)}
+                    {file.size <= 0 ? " · El archivo seleccionado en tu equipo está vacío" : ""}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label>Categoría de contenido</label>

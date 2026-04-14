@@ -77,6 +77,9 @@ model reporte {
   estado                                       String?   @default("Pendiente") @db.VarChar(50)
   notas                                        String?
   nombre_archivo                               String    @db.VarChar(255)
+  mime_type                                    String?   @db.VarChar(150)
+  tamano_bytes                                 Int?
+  archivo_binario                              Bytes?
   ruta                                         String    @db.VarChar(255)
   hash                                         String    @db.VarChar(64)
   fecha_creacion                               DateTime? @default(now()) @db.Timestamp(6)

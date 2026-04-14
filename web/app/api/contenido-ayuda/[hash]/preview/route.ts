@@ -39,6 +39,27 @@ async function resolveFilePath(hash: string) {
   return { fileName, filePath: path.join(UPLOAD_DIR, fileName) };
 }
 
+async function resolveStoredContent(hash: string) {
+  const content = await prisma.reporte.findFirst({
+    where: { hash },
+    select: {
+      nombre_archivo: true,
+      mime_type: true,
+      archivo_binario: true,
+    },
+  });
+
+  if (!content?.archivo_binario) {
+    return null;
+  }
+
+  return {
+    fileName: content.nombre_archivo,
+    mimeType: content.mime_type || getMimeType(content.nombre_archivo),
+    fileBuffer: content.archivo_binario,
+  };
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ hash: string }> }
@@ -46,6 +67,16 @@ export async function GET(
   const { hash } = await params;
 
   try {
+    const storedContent = await resolveStoredContent(hash);
+    if (storedContent) {
+      return new Response(storedContent.fileBuffer, {
+        headers: {
+          "Content-Type": storedContent.mimeType,
+          "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(storedContent.fileName)}`,
+        },
+      });
+    }
+
     const file = await resolveFilePath(hash);
     if (!file) {
       return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });

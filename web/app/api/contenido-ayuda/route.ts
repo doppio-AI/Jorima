@@ -7,22 +7,39 @@ import type { Prisma } from "@prisma/client";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
-async function saveFile(file: File) {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const hash = crypto.createHash("sha256").update(buffer).digest("hex");
-  const ext = path.extname(file.name).toLowerCase();
-  const fileName = `${hash}${ext}`;
+export const runtime = "nodejs";
 
-  await fs.mkdir(UPLOAD_DIR, { recursive: true });
-  const filePath = path.join(UPLOAD_DIR, fileName);
+const MIME_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".txt": "text/plain",
+  ".json": "application/json",
+};
 
-  try {
-    await fs.access(filePath);
-  } catch {
-    await fs.writeFile(filePath, buffer);
+function getMimeType(file: File) {
+  if (file.type) {
+    return file.type;
   }
 
-  return { fileName, relativePath: `/uploads/${fileName}`, hash };
+  const ext = path.extname(file.name).toLowerCase();
+  return MIME_TYPES[ext] ?? "application/octet-stream";
+}
+
+async function buildStoredFile(file: File) {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex");
+
+  return {
+    buffer,
+    hash,
+    mimeType: getMimeType(file),
+    size: file.size || buffer.byteLength,
+  };
 }
 
 function sanitizeOriginalName(name: string) {
@@ -31,12 +48,95 @@ function sanitizeOriginalName(name: string) {
   return cleaned.slice(0, 255);
 }
 
+function getMimeTypeFromName(name: string) {
+  const ext = path.extname(name).toLowerCase();
+  return MIME_TYPES[ext] ?? "application/octet-stream";
+}
+
+async function createHelpContent(params: {
+  usuario_rh_id: number;
+  usuario_personal_id: number;
+  nivel_urgencia: string;
+  tipo_seguimiento: string;
+  estado: string;
+  notas: string;
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+}) {
+  const usuario = await prisma.usuario.findUnique({ where: { usuario_id: params.usuario_rh_id } });
+  if (!usuario || usuario.tipo_usuario !== 1) {
+    return NextResponse.json({ error: "Solo RH puede publicar contenido" }, { status: 403 });
+  }
+
+  if (!params.fileName.trim()) {
+    return NextResponse.json({ error: "El archivo no tiene un nombre válido" }, { status: 400 });
+  }
+
+  if (params.buffer.byteLength <= 0) {
+    return NextResponse.json({ error: "El archivo llegó vacío al servidor" }, { status: 400 });
+  }
+
+  const hash = crypto.createHash("sha256").update(params.buffer).digest("hex");
+
+  const reporte = await prisma.reporte.create({
+    data: {
+      nivel_urgencia: params.nivel_urgencia,
+      tipo_seguimiento: params.tipo_seguimiento,
+      estado: params.estado,
+      notas: params.notas,
+      nombre_archivo: sanitizeOriginalName(params.fileName),
+      mime_type: params.mimeType,
+      tamano_bytes: params.buffer.byteLength,
+      archivo_binario: params.buffer,
+      ruta: `db://reporte/${hash}`,
+      hash,
+      usuario_reporte_usuario_rh_idTousuario: { connect: { usuario_id: params.usuario_rh_id } },
+      usuario_reporte_usuario_personal_idTousuario: { connect: { usuario_id: params.usuario_personal_id } },
+    },
+  });
+
+  return NextResponse.json({ message: "Contenido publicado correctamente", reporte });
+}
+
 export async function POST(request: Request) {
   try {
     const contentType = request.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const body = await request.json();
+      const usuario_rh_id = Number(body?.rh_id);
+      const personalInForm = Number(body?.personal_id);
+      const usuario_personal_id = personalInForm > 0 ? personalInForm : usuario_rh_id;
+      const nivel_urgencia = String(body?.nivel_urgencia || "Baja");
+      const tipo_seguimiento = String(body?.tipo_seguimiento || "Guía emocional");
+      const estado = String(body?.estado || "Publicado");
+      const notas = String(body?.notas || "");
+      const fileName = String(body?.fileName || "");
+      const mimeType = String(body?.mimeType || getMimeTypeFromName(fileName));
+      const fileBase64 = String(body?.fileBase64 || "");
+
+      if (!usuario_rh_id || !fileBase64) {
+        return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
+      }
+
+      const buffer = Buffer.from(fileBase64, "base64");
+
+      return createHelpContent({
+        usuario_rh_id,
+        usuario_personal_id,
+        nivel_urgencia,
+        tipo_seguimiento,
+        estado,
+        notas,
+        fileName,
+        mimeType,
+        buffer,
+      });
+    }
+
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      const file = formData.get("file") as File;
+      const fileValue = formData.get("file");
       const usuario_rh_id = Number(formData.get("rh_id"));
       const personalInForm = Number(formData.get("personal_id"));
       const usuario_personal_id = personalInForm > 0 ? personalInForm : usuario_rh_id;
@@ -45,32 +145,45 @@ export async function POST(request: Request) {
       const estado = (formData.get("estado") as string) || "Publicado";
       const notas = (formData.get("notas") as string) || "";
 
-      if (!file || !usuario_rh_id) {
+      if (!(fileValue instanceof File) || !usuario_rh_id) {
         return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
       }
 
-      const usuario = await prisma.usuario.findUnique({ where: { usuario_id: usuario_rh_id } });
-      if (!usuario || usuario.tipo_usuario !== 1) {
-        return NextResponse.json({ error: "Solo RH puede publicar contenido" }, { status: 403 });
+      const storedFile = await buildStoredFile(fileValue);
+
+      if (storedFile.size <= 0 || storedFile.buffer.byteLength <= 0) {
+        console.error("EMPTY HELP FILE RECEIVED", {
+          name: fileValue.name,
+          type: fileValue.type,
+          reportedSize: fileValue.size,
+          bufferSize: storedFile.buffer.byteLength,
+        });
+
+        return NextResponse.json(
+          {
+            error: "El archivo llegó vacío al servidor",
+            debug: {
+              fileName: fileValue.name,
+              fileType: fileValue.type || null,
+              reportedSize: fileValue.size,
+              bufferSize: storedFile.buffer.byteLength,
+            },
+          },
+          { status: 400 }
+        );
       }
 
-      const { relativePath, hash } = await saveFile(file);
-
-      const reporte = await prisma.reporte.create({
-        data: {
-          nivel_urgencia,
-          tipo_seguimiento,
-          estado,
-          notas,
-          nombre_archivo: sanitizeOriginalName(file.name),
-          ruta: relativePath,
-          hash,
-          usuario_reporte_usuario_rh_idTousuario: { connect: { usuario_id: usuario_rh_id } },
-          usuario_reporte_usuario_personal_idTousuario: { connect: { usuario_id: usuario_personal_id } },
-        },
+      return createHelpContent({
+        usuario_rh_id,
+        usuario_personal_id,
+        nivel_urgencia,
+        tipo_seguimiento,
+        estado,
+        notas,
+        fileName: fileValue.name,
+        mimeType: storedFile.mimeType,
+        buffer: storedFile.buffer,
       });
-
-      return NextResponse.json({ message: "Contenido publicado correctamente", reporte });
     }
 
     return NextResponse.json({ error: "Content-Type inválido" }, { status: 400 });
@@ -104,7 +217,20 @@ export async function GET(request: Request) {
 
     const reportes = await prisma.reporte.findMany({
       where,
-      include: {
+      select: {
+        reporte_id: true,
+        usuario_rh_id: true,
+        usuario_personal_id: true,
+        nivel_urgencia: true,
+        tipo_seguimiento: true,
+        estado: true,
+        notas: true,
+        nombre_archivo: true,
+        mime_type: true,
+        tamano_bytes: true,
+        ruta: true,
+        hash: true,
+        fecha_creacion: true,
         usuario_reporte_usuario_rh_idTousuario: true,
         usuario_reporte_usuario_personal_idTousuario: { include: { edificio: true } },
       },
@@ -113,14 +239,16 @@ export async function GET(request: Request) {
 
     const enriched = await Promise.all(
       reportes.map(async (reporte) => {
-        let tamano_bytes: number | null = null;
+        let tamano_bytes: number | null = reporte.tamano_bytes ?? null;
         try {
-          const normalized = reporte.ruta.replace(/^\/+/, "");
-          const filePath = path.join(process.cwd(), normalized);
-          const stats = await fs.stat(filePath);
-          tamano_bytes = stats.size;
+          if (tamano_bytes === null && !reporte.ruta.startsWith("db://")) {
+            const normalized = reporte.ruta.replace(/^\/+/, "");
+            const filePath = path.join(process.cwd(), normalized);
+            const stats = await fs.stat(filePath);
+            tamano_bytes = stats.size;
+          }
         } catch {
-          tamano_bytes = null;
+          tamano_bytes = tamano_bytes ?? null;
         }
 
         return { ...reporte, tamano_bytes };
@@ -179,6 +307,10 @@ export async function DELETE(request: Request) {
 
     await Promise.all(
       reportes.map(async (reporte) => {
+        if (reporte.ruta.startsWith("db://")) {
+          return;
+        }
+
         const filePath = path.join(UPLOAD_DIR, path.basename(reporte.ruta));
         try {
           await fs.unlink(filePath);
