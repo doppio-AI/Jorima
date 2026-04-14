@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // app/api/reportes/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -156,7 +155,3 @@ const reporte = await prisma.reporte.findFirst({
 });
   return reporte;
 }
-=======
-export { GET, POST, PUT, DELETE } from "@/app/api/contenido-ayuda/route";
-export { getContentByHash as getReportByHash } from "@/app/api/contenido-ayuda/route";
->>>>>>> c0cc7c4 (Pagina terminada)
