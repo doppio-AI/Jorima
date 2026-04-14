@@ -88,12 +88,38 @@ function extraerValoresRespuesta(entry: RespuestaDB) {
   return values.map((value) => mapRespuesta(value));
 }
 
-function normalizarRespuestas(respuestas: RespuestaDB[]) {
-  return respuestas.flatMap((entry) => extraerValoresRespuesta(entry));
+function normalizarFechaDia(value: Date | string) {
+  const fecha = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(fecha.getTime())) {
+    return null;
+  }
+
+  return fecha.toISOString().slice(0, 10);
 }
 
 function promedio(nums: number[]) {
   return nums.reduce((acc, n) => acc + n, 0) / nums.length;
+}
+
+function normalizarRespuestasPorDia(respuestas: RespuestaDB[]) {
+  const dias = new Map<string, number[]>();
+
+  for (const entry of respuestas) {
+    const fecha = normalizarFechaDia(entry.fecha);
+    if (!fecha) continue;
+
+    const valores = extraerValoresRespuesta(entry);
+    if (valores.length === 0) continue;
+
+    const existentes = dias.get(fecha) ?? [];
+    existentes.push(...valores);
+    dias.set(fecha, existentes);
+  }
+
+  return Array.from(dias.entries())
+    .sort(([fechaA], [fechaB]) => fechaA.localeCompare(fechaB))
+    .map(([, valores]) => Number(promedio(valores).toFixed(3)));
 }
 
 function calcularEstadisticas(data: number[]) {
@@ -131,9 +157,7 @@ function crearModelo() {
     })
   );
 
-  model.add(
-    tf.layers.dropout({ rate: 0.08 })
-  );
+  model.add(tf.layers.dropout({ rate: 0.08 }));
 
   model.add(
     tf.layers.dense({
@@ -277,6 +301,10 @@ const EMPTY_RESULT: PrediccionRiesgo = {
   interpretacion: null,
 };
 
+export function invalidarPrediccion(edificio_id: number) {
+  predictionCache.delete(edificio_id);
+}
+
 export async function predecir(edificio_id: number): Promise<PrediccionRiesgo> {
   try {
     if (!Number.isInteger(edificio_id) || edificio_id <= 0) {
@@ -299,11 +327,7 @@ export async function predecir(edificio_id: number): Promise<PrediccionRiesgo> {
       },
     })) as RespuestaDB[];
 
-    if (!respuestasDB || respuestasDB.length < 2) {
-      return EMPTY_RESULT;
-    }
-
-    const valores = normalizarRespuestas(respuestasDB);
+    const valores = normalizarRespuestasPorDia(respuestasDB);
     if (valores.length < 2) {
       return EMPTY_RESULT;
     }

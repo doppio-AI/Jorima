@@ -28,7 +28,6 @@ export const agruparPorDia = (respuestas: any[]) => {
   return dias;
 };
 
-// 🔥 Promedio diario
 export const promediosDiarios = (dias: Record<string, number[]>) => {
   return Object.entries(dias).map(([fecha, valores]) => ({
     fecha,
@@ -37,7 +36,6 @@ export const promediosDiarios = (dias: Record<string, number[]>) => {
   }));
 };
 
-// 🔥 Riesgo
 export const calcularRiesgo = (promedio: number) => {
   return 1 - promedio / 5;
 };

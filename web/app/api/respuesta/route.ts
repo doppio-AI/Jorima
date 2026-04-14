@@ -1,23 +1,26 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { entrenarModelo } from "@/lib/ml";
+import { invalidarPrediccion, predecir } from "../../../lib/ml";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { edificio_id, respuestas } = body;
 
-    if (!edificio_id || !respuestas) {
+    if (!edificio_id || !respuestas || typeof respuestas !== "object") {
       return NextResponse.json(
         { error: "Faltan datos" },
         { status: 400 }
       );
     }
 
+    const respuestasPayload = respuestas as Record<string, unknown>;
+
     const valoresValidos = ["muy mal", "mal", "regular", "bien", "muy bien"];
 
-    for (const key in respuestas) {
-      const valor = String(respuestas[key]).toLowerCase();
+    for (const key in respuestasPayload) {
+      const valor = String(respuestasPayload[key]).toLowerCase();
 
       if (!valoresValidos.includes(valor)) {
         return NextResponse.json(
@@ -27,55 +30,24 @@ export async function POST(req: Request) {
       }
     }
 
-    // =========================
-    // 🔹 GUARDAR RESPUESTA
-    // =========================
     const nueva = await prisma.respuesta.create({
       data: {
         edificio_id,
-        respuestas,
+        respuestas: respuestasPayload as Prisma.InputJsonValue,
       },
     });
 
-    // =========================
-    // 🔹 OBTENER HISTÓRICO
-    // =========================
-    const respuestasDB = await prisma.respuesta.findMany({
-      where: { edificio_id },
-      orderBy: { fecha: "asc" },
+
+    invalidarPrediccion(Number(edificio_id));
+    const prediccion = await predecir(Number(edificio_id));
+
+    return NextResponse.json({
+      respuesta: nueva,
+      prediccion,
     });
-
-    const map: Record<string, number> = {
-      "muy mal": 1,
-      "mal": 2,
-      "regular": 3,
-      "bien": 4,
-      "muy bien": 5,
-    };
-
-    const valores = respuestasDB.map((r) => {
-      let val: any = null;
-
-      if (r.respuestas && typeof r.respuestas === "object") {
-        val = Object.values(r.respuestas)[0];
-      } else {
-        val = r.respuestas;
-      }
-
-      return map[String(val).toLowerCase()] ?? 3;
-    });
-
-    // =========================
-    // 🔹 ENTRENAR
-    // =========================
-    if (valores.length >= 2) {
-      await entrenarModelo(valores);
-    }
-
-    return NextResponse.json(nueva);
 
   } catch (error) {
-    console.error(error);
+    console.error("Error en POST /api/respuesta:", error);
 
     return NextResponse.json(
       { error: "Error en POST" },
@@ -91,7 +63,7 @@ export async function GET() {
     });
 
     return NextResponse.json(data);
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Error en GET" },
       { status: 500 }
