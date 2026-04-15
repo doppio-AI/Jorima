@@ -4,6 +4,11 @@ import crypto from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import type { Prisma } from "@prisma/client";
+import {
+  cleanLegacyNotas,
+  hasHelpContentBinarySupport,
+  serializeLegacyNotas,
+} from "@/lib/help-content-schema";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
@@ -79,22 +84,38 @@ async function createHelpContent(params: {
 
   const hash = crypto.createHash("sha256").update(params.buffer).digest("hex");
 
-  const reporte = await prisma.reporte.create({
-    data: {
-      nivel_urgencia: params.nivel_urgencia,
-      tipo_seguimiento: params.tipo_seguimiento,
-      estado: params.estado,
-      notas: params.notas,
-      nombre_archivo: sanitizeOriginalName(params.fileName),
-      mime_type: params.mimeType,
-      tamano_bytes: params.buffer.byteLength,
-      archivo_binario: params.buffer,
-      ruta: `db://reporte/${hash}`,
-      hash,
-      usuario_reporte_usuario_rh_idTousuario: { connect: { usuario_id: params.usuario_rh_id } },
-      usuario_reporte_usuario_personal_idTousuario: { connect: { usuario_id: params.usuario_personal_id } },
-    },
-  });
+  const hasBinarySupport = await hasHelpContentBinarySupport();
+
+  const reporte = hasBinarySupport
+    ? await prisma.reporte.create({
+        data: {
+          nivel_urgencia: params.nivel_urgencia,
+          tipo_seguimiento: params.tipo_seguimiento,
+          estado: params.estado,
+          notas: params.notas,
+          nombre_archivo: sanitizeOriginalName(params.fileName),
+          mime_type: params.mimeType,
+          tamano_bytes: params.buffer.byteLength,
+          archivo_binario: params.buffer,
+          ruta: `db://reporte/${hash}`,
+          hash,
+          usuario_reporte_usuario_rh_idTousuario: { connect: { usuario_id: params.usuario_rh_id } },
+          usuario_reporte_usuario_personal_idTousuario: { connect: { usuario_id: params.usuario_personal_id } },
+        },
+      })
+    : await prisma.reporte.create({
+        data: {
+          nivel_urgencia: params.nivel_urgencia,
+          tipo_seguimiento: params.tipo_seguimiento,
+          estado: params.estado,
+          notas: serializeLegacyNotas(params.notas, params.mimeType, params.buffer),
+          nombre_archivo: sanitizeOriginalName(params.fileName),
+          ruta: `db-legacy://reporte/${hash}`,
+          hash,
+          usuario_reporte_usuario_rh_idTousuario: { connect: { usuario_id: params.usuario_rh_id } },
+          usuario_reporte_usuario_personal_idTousuario: { connect: { usuario_id: params.usuario_personal_id } },
+        },
+      });
 
   return NextResponse.json({ message: "Contenido publicado correctamente", reporte });
 }
@@ -215,33 +236,58 @@ export async function GET(request: Request) {
       where.tipo_seguimiento = { contains: categoria };
     }
 
-    const reportes = await prisma.reporte.findMany({
-      where,
-      select: {
-        reporte_id: true,
-        usuario_rh_id: true,
-        usuario_personal_id: true,
-        nivel_urgencia: true,
-        tipo_seguimiento: true,
-        estado: true,
-        notas: true,
-        nombre_archivo: true,
-        mime_type: true,
-        tamano_bytes: true,
-        ruta: true,
-        hash: true,
-        fecha_creacion: true,
-        usuario_reporte_usuario_rh_idTousuario: true,
-        usuario_reporte_usuario_personal_idTousuario: { include: { edificio: true } },
-      },
-      orderBy: { fecha_creacion: "desc" },
-    });
+    const hasBinarySupport = await hasHelpContentBinarySupport();
+
+    const reportes = hasBinarySupport
+      ? await prisma.reporte.findMany({
+          where,
+          select: {
+            reporte_id: true,
+            usuario_rh_id: true,
+            usuario_personal_id: true,
+            nivel_urgencia: true,
+            tipo_seguimiento: true,
+            estado: true,
+            notas: true,
+            nombre_archivo: true,
+            mime_type: true,
+            tamano_bytes: true,
+            ruta: true,
+            hash: true,
+            fecha_creacion: true,
+            usuario_reporte_usuario_rh_idTousuario: true,
+            usuario_reporte_usuario_personal_idTousuario: { include: { edificio: true } },
+          },
+          orderBy: { fecha_creacion: "desc" },
+        })
+      : await prisma.reporte.findMany({
+          where,
+          select: {
+            reporte_id: true,
+            usuario_rh_id: true,
+            usuario_personal_id: true,
+            nivel_urgencia: true,
+            tipo_seguimiento: true,
+            estado: true,
+            notas: true,
+            nombre_archivo: true,
+            ruta: true,
+            hash: true,
+            fecha_creacion: true,
+            usuario_reporte_usuario_rh_idTousuario: true,
+            usuario_reporte_usuario_personal_idTousuario: { include: { edificio: true } },
+          },
+          orderBy: { fecha_creacion: "desc" },
+        });
 
     const enriched = await Promise.all(
       reportes.map(async (reporte) => {
-        let tamano_bytes: number | null = reporte.tamano_bytes ?? null;
+        const notasSanitizadas = cleanLegacyNotas(reporte.notas);
+        let tamano_bytes: number | null = hasBinarySupport
+          ? (reporte as { tamano_bytes?: number | null }).tamano_bytes ?? null
+          : null;
         try {
-          if (tamano_bytes === null && !reporte.ruta.startsWith("db://")) {
+          if (tamano_bytes === null && !reporte.ruta.startsWith("db://") && !reporte.ruta.startsWith("db-legacy://")) {
             const normalized = reporte.ruta.replace(/^\/+/, "");
             const filePath = path.join(process.cwd(), normalized);
             const stats = await fs.stat(filePath);
@@ -251,7 +297,12 @@ export async function GET(request: Request) {
           tamano_bytes = tamano_bytes ?? null;
         }
 
-        return { ...reporte, tamano_bytes };
+        return {
+          ...reporte,
+          notas: notasSanitizadas,
+          tamano_bytes,
+          mime_type: hasBinarySupport ? (reporte as { mime_type?: string | null }).mime_type ?? null : null,
+        };
       })
     );
 
