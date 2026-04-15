@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { FiArrowLeft, FiShield, FiFileText, FiLock } from "react-icons/fi";
+import { FiShield, FiFileText, FiLock } from "react-icons/fi";
 
 export default function AvisoPrivacidad() {
   return (
@@ -94,7 +93,7 @@ export default function AvisoPrivacidad() {
         </section>
 
         {/* SECCIÓN 3: LINEAMIENTOS DE SEGURIDAD */}
-        <section style={{ marginBottom: "24px" }}>
+        <section>
           <h2 style={{ color: "#2A9D8F", display: "flex", alignItems: "center", gap: "8px", fontSize: "20px", borderTop: "1px solid #E2E8F0", paddingTop: "24px" }}>
             <FiLock /> 3. LINEAMIENTOS DE SEGURIDAD DE LA INFORMACIÓN
           </h2>
@@ -131,13 +130,6 @@ export default function AvisoPrivacidad() {
             <li>Auditoría de Dependencias (CVEs).</li>
           </ul>
         </section>
-
-        {/* BOTÓN VOLVER */}
-        <div style={{ marginTop: "40px", paddingTop: "20px", borderTop: "1px solid #E2E8F0", textAlign: "center" }}>
-          <Link href="/registro" style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#0F4C81", color: "#FFFFFF", textDecoration: "none", fontWeight: "600", padding: "12px 24px", borderRadius: "8px", transition: "0.3s" }}>
-            <FiArrowLeft /> Volver al Registro
-          </Link>
-        </div>
       </div>
     </main>
   );

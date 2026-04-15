@@ -337,6 +337,7 @@ export default function Registro() {
             <Link 
               href="/aviso-privacidad" 
               target="_blank" 
+              rel="noopener noreferrer"
               style={{ color: "#0F4C81", fontWeight: "600", textDecoration: "underline" }}
             >
               Aviso de Privacidad

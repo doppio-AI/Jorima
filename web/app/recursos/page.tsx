@@ -10,6 +10,7 @@ import {
   FiUser,
   FiExternalLink,
   FiDownload,
+  FiShield, // <-- Ícono del escudo agregado
 } from "react-icons/fi";
 import { getPdfViewerUrl } from "@/lib/pdf-viewer";
 
@@ -173,6 +174,12 @@ export default function RecursosPage() {
             <a className="sidebar-link active">
               <FiBookOpen size={20} />
               Recursos de Ayuda
+            </a>
+
+            {/* AVISO DE PRIVACIDAD */}
+            <a className="sidebar-link" onClick={() => window.open("/aviso-privacidad", "_blank")}>
+              <FiShield size={20} />
+              Aviso de Privacidad
             </a>
           </nav>
         </div>

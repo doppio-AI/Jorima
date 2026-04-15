@@ -16,6 +16,7 @@ import {
   FiClock as FiTurno,
   FiCalendar,
   FiMapPin,
+  FiShield, // <-- Ícono del escudo agregado
 } from "react-icons/fi";
 
 type UsuarioCompleto = {
@@ -258,6 +259,12 @@ export default function PerfilPage() {
             <a className="sidebar-link" onClick={() => router.push("/recursos")}>
               <FiBookOpen size={20} />
               Recursos de Ayuda
+            </a>
+
+            {/* AVISO DE PRIVACIDAD */}
+            <a className="sidebar-link" onClick={() => window.open("/aviso-privacidad", "_blank")}>
+              <FiShield size={20} />
+              Aviso de Privacidad
             </a>
           </nav>
         </div>
