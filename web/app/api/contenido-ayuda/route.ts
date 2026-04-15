@@ -1,195 +1,154 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
-import { promises as fs } from "fs";
-import path from "path";
 import type { Prisma } from "@prisma/client";
-
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
-
-export const runtime = "nodejs";
-
-const MIME_TYPES: Record<string, string> = {
-  ".pdf": "application/pdf",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".mp4": "video/mp4",
-  ".mov": "video/quicktime",
-  ".txt": "text/plain",
-  ".json": "application/json",
-};
-
-function getMimeType(file: File) {
-  if (file.type) {
-    return file.type;
-  }
-
-  const ext = path.extname(file.name).toLowerCase();
-  return MIME_TYPES[ext] ?? "application/octet-stream";
-}
-
-async function buildStoredFile(file: File) {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const hash = crypto.createHash("sha256").update(buffer).digest("hex");
-
-  return {
-    buffer,
-    hash,
-    mimeType: getMimeType(file),
-    size: file.size || buffer.byteLength,
-  };
-}
+import cloudinary from "@/lib/cloudinary";
 
 function sanitizeOriginalName(name: string) {
   const cleaned = (name || "").replace(/[\\/:*?"<>|]/g, "_").trim();
-  if (!cleaned) return "documento-ayuda";
+  if (!cleaned) return "documento-ayuda.pdf";
   return cleaned.slice(0, 255);
 }
 
-function getMimeTypeFromName(name: string) {
-  const ext = path.extname(name).toLowerCase();
-  return MIME_TYPES[ext] ?? "application/octet-stream";
+function uploadBufferToCloudinary(
+  buffer: Buffer,
+  options: {
+    public_id: string;
+    folder: string;
+    resource_type?: "raw" | "image" | "video" | "auto";
+    overwrite?: boolean;
+    filename_override?: string;
+  }
+): Promise<{
+  secure_url: string;
+  public_id: string;
+  bytes: number;
+  resource_type: string;
+  format?: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: options.folder,
+        public_id: options.public_id,
+        resource_type: options.resource_type ?? "raw",
+        overwrite: options.overwrite ?? false,
+        filename_override: options.filename_override,
+        use_filename: false,
+        unique_filename: false,
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        if (!result) return reject(new Error("Cloudinary no devolvió resultado"));
+        resolve({
+          secure_url: result.secure_url,
+          public_id: result.public_id,
+          bytes: result.bytes,
+          resource_type: result.resource_type,
+          format: result.format,
+        });
+      }
+    );
+
+    stream.end(buffer);
+  });
 }
 
-async function createHelpContent(params: {
-  usuario_rh_id: number;
-  usuario_personal_id: number;
-  nivel_urgencia: string;
-  tipo_seguimiento: string;
-  estado: string;
-  notas: string;
-  fileName: string;
-  mimeType: string;
-  buffer: Buffer;
-}) {
-  const usuario = await prisma.usuario.findUnique({ where: { usuario_id: params.usuario_rh_id } });
-  if (!usuario || usuario.tipo_usuario !== 1) {
-    return NextResponse.json({ error: "Solo RH puede publicar contenido" }, { status: 403 });
-  }
+async function saveFile(file: File) {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex");
+  const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+  const publicId = hash;
 
-  if (!params.fileName.trim()) {
-    return NextResponse.json({ error: "El archivo no tiene un nombre válido" }, { status: 400 });
-  }
-
-  if (params.buffer.byteLength <= 0) {
-    return NextResponse.json({ error: "El archivo llegó vacío al servidor" }, { status: 400 });
-  }
-
-  const hash = crypto.createHash("sha256").update(params.buffer).digest("hex");
-
-  const reporte = await prisma.reporte.create({
-    data: {
-      nivel_urgencia: params.nivel_urgencia,
-      tipo_seguimiento: params.tipo_seguimiento,
-      estado: params.estado,
-      notas: params.notas,
-      nombre_archivo: sanitizeOriginalName(params.fileName),
-      mime_type: params.mimeType,
-      tamano_bytes: params.buffer.byteLength,
-      archivo_binario: params.buffer,
-      ruta: `db://reporte/${hash}`,
-      hash,
-      usuario_reporte_usuario_rh_idTousuario: { connect: { usuario_id: params.usuario_rh_id } },
-      usuario_reporte_usuario_personal_idTousuario: { connect: { usuario_id: params.usuario_personal_id } },
-    },
+  const uploaded = await uploadBufferToCloudinary(buffer, {
+    folder: "jorima/reportes",
+    public_id: publicId,
+    resource_type: "raw",
+    overwrite: false,
+    filename_override: sanitizeOriginalName(file.name),
   });
 
-  return NextResponse.json({ message: "Contenido publicado correctamente", reporte });
+  return {
+    fileName: `${publicId}.${ext}`,
+    relativePath: uploaded.secure_url,
+    hash,
+    publicId: uploaded.public_id,
+    bytes: uploaded.bytes,
+  };
+}
+
+function extractPublicIdFromUrlOrPath(ruta: string) {
+  if (!ruta) return null;
+
+  // Si guardaste URL de Cloudinary, intenta extraer public_id de:
+  // .../raw/upload/v123/jorima/reportes/<public_id>.pdf
+  const match = ruta.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-zA-Z0-9]+)?$/);
+  return match?.[1] ?? null;
 }
 
 export async function POST(request: Request) {
   try {
     const contentType = request.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      const body = await request.json();
-      const usuario_rh_id = Number(body?.rh_id);
-      const personalInForm = Number(body?.personal_id);
-      const usuario_personal_id = personalInForm > 0 ? personalInForm : usuario_rh_id;
-      const nivel_urgencia = String(body?.nivel_urgencia || "Baja");
-      const tipo_seguimiento = String(body?.tipo_seguimiento || "Guía emocional");
-      const estado = String(body?.estado || "Publicado");
-      const notas = String(body?.notas || "");
-      const fileName = String(body?.fileName || "");
-      const mimeType = String(body?.mimeType || getMimeTypeFromName(fileName));
-      const fileBase64 = String(body?.fileBase64 || "");
 
-      if (!usuario_rh_id || !fileBase64) {
-        return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
-      }
+    if (!contentType.includes("multipart/form-data")) {
+      return NextResponse.json({ error: "Content-Type inválido" }, { status: 400 });
+    }
 
-      const buffer = Buffer.from(fileBase64, "base64");
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    const usuario_rh_id = Number(formData.get("rh_id"));
+    const personalInForm = Number(formData.get("personal_id"));
+    const usuario_personal_id = personalInForm > 0 ? personalInForm : usuario_rh_id;
+    const nivel_urgencia = (formData.get("nivel_urgencia") as string) || "Baja";
+    const tipo_seguimiento = (formData.get("tipo_seguimiento") as string) || "Guía emocional";
+    const estado = (formData.get("estado") as string) || "Publicado";
+    const notas = (formData.get("notas") as string) || "";
 
-      return createHelpContent({
-        usuario_rh_id,
-        usuario_personal_id,
+    if (!file || !usuario_rh_id) {
+      return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { usuario_id: usuario_rh_id },
+    });
+
+    if (!usuario || usuario.tipo_usuario !== 1) {
+      return NextResponse.json({ error: "Solo RH puede publicar contenido" }, { status: 403 });
+    }
+
+    const { relativePath, hash } = await saveFile(file);
+
+    const reporte = await prisma.reporte.create({
+      data: {
         nivel_urgencia,
         tipo_seguimiento,
         estado,
         notas,
-        fileName,
-        mimeType,
-        buffer,
-      });
-    }
+        nombre_archivo: sanitizeOriginalName(file.name),
+        ruta: relativePath,
+        hash,
+        usuario_reporte_usuario_rh_idTousuario: {
+          connect: { usuario_id: usuario_rh_id },
+        },
+        usuario_reporte_usuario_personal_idTousuario: {
+          connect: { usuario_id: usuario_personal_id },
+        },
+      },
+    });
 
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-      const fileValue = formData.get("file");
-      const usuario_rh_id = Number(formData.get("rh_id"));
-      const personalInForm = Number(formData.get("personal_id"));
-      const usuario_personal_id = personalInForm > 0 ? personalInForm : usuario_rh_id;
-      const nivel_urgencia = (formData.get("nivel_urgencia") as string) || "Baja";
-      const tipo_seguimiento = (formData.get("tipo_seguimiento") as string) || "Guía emocional";
-      const estado = (formData.get("estado") as string) || "Publicado";
-      const notas = (formData.get("notas") as string) || "";
-
-      if (!(fileValue instanceof File) || !usuario_rh_id) {
-        return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
-      }
-
-      const storedFile = await buildStoredFile(fileValue);
-
-      if (storedFile.size <= 0 || storedFile.buffer.byteLength <= 0) {
-        console.error("EMPTY HELP FILE RECEIVED", {
-          name: fileValue.name,
-          type: fileValue.type,
-          reportedSize: fileValue.size,
-          bufferSize: storedFile.buffer.byteLength,
-        });
-
-        return NextResponse.json(
-          {
-            error: "El archivo llegó vacío al servidor",
-            debug: {
-              fileName: fileValue.name,
-              fileType: fileValue.type || null,
-              reportedSize: fileValue.size,
-              bufferSize: storedFile.buffer.byteLength,
-            },
-          },
-          { status: 400 }
-        );
-      }
-
-      return createHelpContent({
-        usuario_rh_id,
-        usuario_personal_id,
-        nivel_urgencia,
-        tipo_seguimiento,
-        estado,
-        notas,
-        fileName: fileValue.name,
-        mimeType: storedFile.mimeType,
-        buffer: storedFile.buffer,
-      });
-    }
-
-    return NextResponse.json({ error: "Content-Type inválido" }, { status: 400 });
+    return NextResponse.json({
+      message: "Contenido publicado correctamente",
+      reporte,
+    });
   } catch (error) {
     console.error("UPLOAD ERROR:", error);
-    return NextResponse.json({ error: "Error al publicar contenido" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Error al publicar contenido",
+        detail: error instanceof Error ? error.message : "Error desconocido",
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -201,9 +160,11 @@ export async function GET(request: Request) {
     const categoria = url.searchParams.get("categoria")?.toLowerCase() || "";
 
     const where: Prisma.reporteWhereInput = {};
+
     if (scope !== "admin") {
       where.estado = "Publicado";
     }
+
     if (q) {
       where.OR = [
         { nombre_archivo: { contains: q } },
@@ -211,49 +172,26 @@ export async function GET(request: Request) {
         { tipo_seguimiento: { contains: q } },
       ];
     }
+
     if (categoria) {
       where.tipo_seguimiento = { contains: categoria };
     }
 
     const reportes = await prisma.reporte.findMany({
       where,
-      select: {
-        reporte_id: true,
-        usuario_rh_id: true,
-        usuario_personal_id: true,
-        nivel_urgencia: true,
-        tipo_seguimiento: true,
-        estado: true,
-        notas: true,
-        nombre_archivo: true,
-        mime_type: true,
-        tamano_bytes: true,
-        ruta: true,
-        hash: true,
-        fecha_creacion: true,
+      include: {
         usuario_reporte_usuario_rh_idTousuario: true,
-        usuario_reporte_usuario_personal_idTousuario: { include: { edificio: true } },
+        usuario_reporte_usuario_personal_idTousuario: {
+          include: { edificio: true },
+        },
       },
       orderBy: { fecha_creacion: "desc" },
     });
 
-    const enriched = await Promise.all(
-      reportes.map(async (reporte) => {
-        let tamano_bytes: number | null = reporte.tamano_bytes ?? null;
-        try {
-          if (tamano_bytes === null && !reporte.ruta.startsWith("db://")) {
-            const normalized = reporte.ruta.replace(/^\/+/, "");
-            const filePath = path.join(process.cwd(), normalized);
-            const stats = await fs.stat(filePath);
-            tamano_bytes = stats.size;
-          }
-        } catch {
-          tamano_bytes = tamano_bytes ?? null;
-        }
-
-        return { ...reporte, tamano_bytes };
-      })
-    );
+    const enriched = reportes.map((reporte) => ({
+      ...reporte,
+      tamano_bytes: null, // ya no lo lees de fs
+    }));
 
     return NextResponse.json(enriched);
   } catch (error) {
@@ -285,6 +223,7 @@ export async function DELETE(request: Request) {
     const idFromQuery = Number(searchParams.get("id"));
 
     let ids: number[] = [];
+
     if (idFromQuery > 0) {
       ids = [idFromQuery];
     } else {
@@ -307,14 +246,16 @@ export async function DELETE(request: Request) {
 
     await Promise.all(
       reportes.map(async (reporte) => {
-        if (reporte.ruta.startsWith("db://")) {
-          return;
-        }
+        const publicId = extractPublicIdFromUrlOrPath(reporte.ruta);
+        if (!publicId) return;
 
-        const filePath = path.join(UPLOAD_DIR, path.basename(reporte.ruta));
         try {
-          await fs.unlink(filePath);
-        } catch {}
+          await cloudinary.uploader.destroy(publicId, {
+            resource_type: "raw",
+          });
+        } catch (err) {
+          console.error("CLOUDINARY DELETE ERROR:", err);
+        }
       })
     );
 
@@ -322,7 +263,10 @@ export async function DELETE(request: Request) {
       where: { reporte_id: { in: reportes.map((r) => r.reporte_id) } },
     });
 
-    return NextResponse.json({ message: "Contenido eliminado", deleted: deleted.count });
+    return NextResponse.json({
+      message: "Contenido eliminado",
+      deleted: deleted.count,
+    });
   } catch (error) {
     console.error("DELETE CONTENIDO AYUDA ERROR:", error);
     return NextResponse.json({ error: "Error al eliminar contenido" }, { status: 500 });
