@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import CryptoJS from "crypto-js";
@@ -22,6 +23,9 @@ export default function Registro() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // ESTADO PARA EL AVISO DE PRIVACIDAD
+  const [aceptaPrivacidad, setAceptaPrivacidad] = useState(false);
 
   const [form, setForm] = useState({
     tipo_usuario: 2,
@@ -104,6 +108,12 @@ export default function Registro() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // VALIDACIÓN DEL AVISO DE PRIVACIDAD
+    if (!aceptaPrivacidad) {
+      alert("Debes aceptar el Aviso de Privacidad para continuar.");
+      return;
+    }
 
     if (!validate()) return;
 
@@ -310,6 +320,29 @@ export default function Registro() {
             </button>
           </div>
           {errors.confirmContrasena && <span className="error-text">{errors.confirmContrasena}</span>}
+        </div>
+
+        {/* CHECKBOX AVISO DE PRIVACIDAD */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "16px", marginBottom: "24px" }}>
+          <input
+            type="checkbox"
+            id="privacidad"
+            checked={aceptaPrivacidad}
+            onChange={(e) => setAceptaPrivacidad(e.target.checked)}
+            required
+            style={{ marginTop: "4px", width: "18px", height: "18px", cursor: "pointer", accentColor: "#0F4C81" }}
+          />
+          <label htmlFor="privacidad" style={{ fontSize: "14px", color: "#4A5568", lineHeight: "1.5" }}>
+            He leído y acepto el{" "}
+            <Link 
+              href="/aviso-privacidad" 
+              target="_blank" 
+              style={{ color: "#0F4C81", fontWeight: "600", textDecoration: "underline" }}
+            >
+              Aviso de Privacidad
+            </Link>
+            . Entiendo que mis datos serán tratados de forma confidencial.
+          </label>
         </div>
 
         {/* BOTÓN */}

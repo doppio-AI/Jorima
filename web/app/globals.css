@@ -1922,3 +1922,134 @@ input[type="file"] {
 [data-theme="dark"] .typing-indicator span {
   color: #7adacf;
 }
+/* ── 2FA VERIFICAR STYLES - AGREGAR AL FINAL DE globals.css ── */
+
+.verificar-card {
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+  max-width: 460px;
+}
+
+.verificar-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #eef7f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2A9D8F;
+  margin: 0 auto 8px;
+}
+
+.verificar-subtitle {
+  color: #8896a6;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.verificar-correo {
+  color: #1a2b3c;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* Inputs del código */
+
+.codigo-inputs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 20px 0 12px;
+}
+
+.codigo-input {
+  width: 50px;
+  height: 60px;
+  text-align: center;
+  font-size: 1.6rem;
+  font-weight: 700;
+  border: 2px solid #d1d9e0;
+  border-radius: 10px;
+  background: #fff;
+  color: #1a2b3c;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.codigo-input:focus {
+  border-color: #2A9D8F;
+  box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.12);
+}
+
+.codigo-input.input-error {
+  border-color: #e74c3c;
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.codigo-input:disabled {
+  background: #f7fafc;
+  cursor: not-allowed;
+}
+
+/* Mensajes */
+
+.verificar-info {
+  color: #2A9D8F;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.verificar-tiempo {
+  color: #8896a6;
+  font-size: 0.9rem;
+  margin: 8px 0;
+}
+
+/* Botón reenviar */
+
+.btn-reenviar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid #2A9D8F;
+  color: #2A9D8F;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.btn-reenviar:hover:not(:disabled) {
+  background: #eef7f5;
+}
+
+.btn-reenviar:disabled {
+  border-color: #d1d9e0;
+  color: #aab5c0;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .codigo-input {
+    width: 42px;
+    height: 52px;
+    font-size: 1.3rem;
+  }
+
+  .codigo-inputs {
+    gap: 6px;
+  }
+}

@@ -10,6 +10,7 @@ export default function Login() {
   const router = useRouter();
 
   const [publicKey, setPublicKey] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     correo: "",
@@ -31,6 +32,7 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
 
     e.preventDefault();
+    setLoading(true);
 
     try {
 
@@ -45,82 +47,58 @@ export default function Login() {
       });
 
       /* CIFRAR DATOS */
-
       const encryptedData = CryptoJS.AES.encrypt(
-  payload,
-  aesKey,
-  { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
-).ciphertext.toString(CryptoJS.enc.Base64);
+        payload,
+        aesKey,
+        { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+      ).ciphertext.toString(CryptoJS.enc.Base64);
 
       /* CIFRAR AES CON RSA */
-
       const rsa = new JSEncrypt();
-
       rsa.setPublicKey(publicKey);
 
       const aesKeyHex = aesKey.toString(CryptoJS.enc.Hex);
-
       const encryptedKey = rsa.encrypt(aesKeyHex);
 
       if (!encryptedKey) {
-
         alert("Error cifrando clave RSA");
-
+        setLoading(false);
         return;
-
       }
 
       /* ENVIAR LOGIN */
-
       const res = await fetch("/api/login", {
-
         method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-
           encryptedData,
           encryptedKey,
           iv: CryptoJS.enc.Base64.stringify(iv)
-
         })
-
       });
 
       const data = await res.json();
 
       if (res.ok) {
+        /* Guardar temporalmente el usuario_id en sessionStorage */
+        sessionStorage.setItem("pending_2fa", JSON.stringify({
+          usuario_id: data.usuario_id,
+          correo: data.correo,
+        }));
 
-        /* guardar usuario en cookie pública */
-
-        document.cookie = `usuario_public=${encodeURIComponent(
-          JSON.stringify(data.usuario)
-        )}; path=/; max-age=86400`;
-
-        /* redirigir dashboard */
-
-        if (Number(data.usuario.tipo_usuario) === 1) {
-          router.push("/administrador");
-        } else {
-          router.push("/usuarios");
-        }
+        /* Redirigir a la pantalla de verificación */
+        router.push("/verificar");
 
       } else {
-
         alert(data.error || "Credenciales incorrectas");
-
       }
 
     } catch (error) {
       alert("Error al iniciar sesión");
+    } finally {
+      setLoading(false);
     }
-
   };
-
-
 
   return (
 
@@ -136,43 +114,29 @@ export default function Login() {
         <h2>Iniciar Sesión</h2>
 
         <div className="form-group">
-
           <label>Correo Institucional</label>
-
           <input
             type="email"
             value={form.correo}
-            onChange={(e) =>
-              setForm({ ...form, correo: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, correo: e.target.value })}
             required
           />
-
         </div>
 
         <div className="form-group">
-
           <label>Contraseña</label>
-
           <input
             type="password"
             value={form.contrasena}
-            onChange={(e) =>
-              setForm({ ...form, contrasena: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, contrasena: e.target.value })}
             required
           />
-
         </div>
 
-        <button type="submit" className="btn-primary">
-          Entrar
+        <button type="submit" className="btn-primary" disabled={loading}>
+          {loading ? "Enviando código..." : "Entrar"}
         </button>
-
-        <a className="link link-primary">
-          ¿Olvidé mi contraseña?
-        </a>
-
+        
         <a className="link link-primary" href="/registro">
           Registrarse
         </a>

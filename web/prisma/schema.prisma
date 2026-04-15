@@ -9,20 +9,21 @@ datasource db {
 }
 
 model usuario {
-  usuario_id                                   Int            @id @default(autoincrement())
+  usuario_id                                   Int                   @id @default(autoincrement())
   tipo_usuario                                 Int
-  correo                                       String         @unique @db.VarChar(150)
-  nombre                                       String         @db.VarChar(100)
-  apellido_paterno                             String         @db.VarChar(100)
-  apellido_materno                             String?        @db.VarChar(100)
+  correo                                       String                @unique @db.VarChar(150)
+  nombre                                       String                @db.VarChar(100)
+  apellido_paterno                             String                @db.VarChar(100)
+  apellido_materno                             String?               @db.VarChar(100)
   contrasena                                   String
   edificio_id                                  Int
-  turno                                        String?        @db.VarChar(50)
-  fecha_registro                               DateTime?      @default(now()) @db.Timestamp(6)
+  turno                                        String?               @db.VarChar(50)
+  fecha_registro                               DateTime?             @default(now()) @db.Timestamp(6)
   conversacion                                 conversacion[]
-  reporte_reporte_usuario_personal_idTousuario reporte[]      @relation("reporte_usuario_personal_idTousuario")
-  reporte_reporte_usuario_rh_idTousuario       reporte[]      @relation("reporte_usuario_rh_idTousuario")
-  edificio                                     edificio       @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuario_edificio")
+  codigo_verificacion                          codigo_verificacion[]
+  reporte_reporte_usuario_personal_idTousuario reporte[]             @relation("reporte_usuario_personal_idTousuario")
+  reporte_reporte_usuario_rh_idTousuario       reporte[]             @relation("reporte_usuario_rh_idTousuario")
+  edificio                                     edificio              @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuario_edificio")
 
   @@index([edificio_id], map: "idx_usuario_edificio")
 }
@@ -67,7 +68,19 @@ model mensaje {
   @@index([conversacion_id], map: "idx_mensaje_conversacion")
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model codigo_verificacion {
+  codigo_id        Int      @id @default(autoincrement())
+  usuario_id       Int
+  codigo           String   @db.VarChar(6)
+  fecha_creacion   DateTime @default(now()) @db.Timestamp(6)
+  fecha_expiracion DateTime @db.Timestamp(6)
+  usado            Boolean  @default(false)
+  usuario          usuario  @relation(fields: [usuario_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([usuario_id], map: "idx_codigo_usuario")
+  @@index([codigo], map: "idx_codigo_valor")
+}
+
 model reporte {
   reporte_id                                   Int       @id @default(autoincrement())
   usuario_rh_id                                Int
@@ -87,7 +100,6 @@ model reporte {
   usuario_reporte_usuario_rh_idTousuario       usuario   @relation("reporte_usuario_rh_idTousuario", fields: [usuario_rh_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reporte_rh")
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model riesgo_prediccion {
   id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   edificio_id           Int

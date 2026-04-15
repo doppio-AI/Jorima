@@ -4,28 +4,24 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { getKeys } from "@/lib/rsa";
 
+const N8N_2FA_WEBHOOK = "https://159.65.111.84.sslip.io/webhook/Jorima-2FA";
+
 export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-
     const { encryptedData, encryptedKey, iv } = body;
 
-    //Validar que los datos necesarios hayan sido enviados
     if (!encryptedData || !encryptedKey || !iv) {
-
       return NextResponse.json(
         { error: "Datos incompletos" },
         { status: 400 }
       );
-
     }
 
-      // Esta clave se usa para descifrar la clave AES enviada por el cliente.
+    /* ── Descifrar credenciales ── */
     const { privateKey } = getKeys();
 
-    //   El cliente cifró la clave AES usando la clave pública RSA.
-    //   Aquí se usa la clave privada RSA para recuperar la clave AES original.
     const aesKeyHex = crypto.privateDecrypt(
       {
         key: privateKey,
@@ -34,94 +30,97 @@ export async function POST(request: Request) {
       Buffer.from(encryptedKey, "base64")
     ).toString();
 
-    //   Convertimos la clave AES de hexadecimal a Buffer para poder usarla en el proceso de descifrado.
     const aesKey = Buffer.from(aesKeyHex, "hex");
 
-    //   Se utiliza el algoritmo AES-256-CBC
     const decipher = crypto.createDecipheriv(
-  "aes-256-cbc",
-  aesKey,
-  Buffer.from(iv, "base64")
-);
+      "aes-256-cbc",
+      aesKey,
+      Buffer.from(iv, "base64")
+    );
 
-    let decrypted =
-      decipher.update(encryptedData, "base64", "utf8");
-
+    let decrypted = decipher.update(encryptedData, "base64", "utf8");
     decrypted += decipher.final("utf8");
 
-    //   Los datos descifrados contienen el correo y la contraseña en formato JSON.
     const { correo, contrasena } = JSON.parse(decrypted);
 
+    /* ── Validar usuario ── */
     const user = await prisma.usuario.findUnique({
       where: { correo }
     });
 
     if (!user) {
-
       return NextResponse.json(
         { error: "Usuario no encontrado" },
         { status: 404 }
       );
-
     }
-    const validPassword = await bcrypt.compare(
-      contrasena,
-      user.contrasena
-    );
+
+    const validPassword = await bcrypt.compare(contrasena, user.contrasena);
 
     if (!validPassword) {
-
       return NextResponse.json(
         { error: "Credenciales inválidas" },
         { status: 401 }
       );
-
     }
 
-    const response = NextResponse.json({
+    /* ── Generar código de 6 dígitos ── */
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
 
-      message: "Login exitoso",
+    /* ── Calcular fecha de expiración (5 minutos) ── */
+    const fechaExpiracion = new Date(Date.now() + 5 * 60 * 1000);
 
-      usuario: {
-        id: user.usuario_id,
-        nombre: user.nombre,
-        correo: user.correo,
-        tipo_usuario: user.tipo_usuario
-      }
-
+    /* ── Invalidar códigos anteriores no usados del usuario ── */
+    await prisma.codigo_verificacion.updateMany({
+      where: {
+        usuario_id: user.usuario_id,
+        usado: false,
+      },
+      data: { usado: true },
     });
 
-    response.cookies.set("usuario", JSON.stringify({
-      id: user.usuario_id,
-      tipo_usuario: user.tipo_usuario
-    }), {
-      httpOnly: true,
-      path: "/",
-      maxAge: 60 * 60 * 24
+    /* ── Guardar nuevo código en BD ── */
+    await prisma.codigo_verificacion.create({
+      data: {
+        usuario_id: user.usuario_id,
+        codigo,
+        fecha_expiracion: fechaExpiracion,
+      },
     });
 
-    response.cookies.set("usuario_public", encodeURIComponent(JSON.stringify({
-      id: user.usuario_id,
-      tipo_usuario: user.tipo_usuario
-    })), {
-      httpOnly: false,
-      path: "/",
-      maxAge: 60 * 60 * 24
-    });
+    /* ── Enviar código por correo a través de n8n ── */
+    try {
+      await fetch(N8N_2FA_WEBHOOK, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          correo: user.correo,
+          codigo,
+          nombre: user.nombre,
+        }),
+      });
+    } catch (n8nError) {
+      console.error("Error enviando código a n8n:", n8nError);
+      return NextResponse.json(
+        { error: "Error al enviar el código de verificación" },
+        { status: 500 }
+      );
+    }
 
-    return response;
+    /* ── Responder con éxito (sin crear sesión todavía) ── */
+    return NextResponse.json({
+      message: "Código enviado a tu correo",
+      usuario_id: user.usuario_id,
+      correo: user.correo,
+    });
 
   } catch (error) {
-
     console.error("LOGIN ERROR:", error);
-
     return NextResponse.json(
       { error: "Error interno en login" },
       { status: 500 }
     );
-
   }
-
 }
 
 export async function DELETE() {
@@ -130,7 +129,6 @@ export async function DELETE() {
     { status: 200 }
   );
 
-  // Borrar cookie privada
   response.cookies.set("usuario", "", {
     httpOnly: true,
     path: "/",
@@ -138,7 +136,6 @@ export async function DELETE() {
     expires: new Date(0),
   });
 
-  // Borrar cookie pública
   response.cookies.set("usuario_public", "", {
     path: "/",
     maxAge: 0,

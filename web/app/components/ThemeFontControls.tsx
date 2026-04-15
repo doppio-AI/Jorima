@@ -8,11 +8,15 @@ const STORAGE_THEME = "jorima_theme";
 const STORAGE_FONT_SCALE = "jorima_font_scale";
 
 export default function ThemeFontControls() {
+  // 1. AÑADIMOS EL ESTADO MOUNTED
+  const [mounted, setMounted] = useState(false);
+
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === "undefined") return "light";
     const storedTheme = localStorage.getItem(STORAGE_THEME) as Theme | null;
     return storedTheme === "dark" ? "dark" : "light";
   });
+  
   const [fontScale, setFontScale] = useState<number>(() => {
     if (typeof window === "undefined") return 1;
     const storedScale = Number(localStorage.getItem(STORAGE_FONT_SCALE) ?? 1);
@@ -39,6 +43,11 @@ export default function ThemeFontControls() {
     []
   );
 
+  // 2. INDICAMOS QUE EL COMPONENTE YA SE MONTÓ EN EL CLIENTE
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     try {
       document.documentElement.dataset.theme = theme;
@@ -59,6 +68,11 @@ export default function ThemeFontControls() {
     document.documentElement.dataset.theme = nextTheme;
     document.documentElement.style.setProperty("--font-scale", String(nextScale));
   };
+
+  // 3. SI AÚN NO SE HA MONTADO (ESTÁ EN EL SERVIDOR), NO RENDERIZAMOS NADA
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <div style={panelStyle}>
