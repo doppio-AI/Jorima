@@ -19,8 +19,8 @@ model usuario {
   edificio_id                                  Int
   turno                                        String?               @db.VarChar(50)
   fecha_registro                               DateTime?             @default(now()) @db.Timestamp(6)
-  conversacion                                 conversacion[]
   codigo_verificacion                          codigo_verificacion[]
+  conversacion                                 conversacion[]
   reporte_reporte_usuario_personal_idTousuario reporte[]             @relation("reporte_usuario_personal_idTousuario")
   reporte_reporte_usuario_rh_idTousuario       reporte[]             @relation("reporte_usuario_rh_idTousuario")
   edificio                                     edificio              @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuario_edificio")
@@ -90,12 +90,12 @@ model reporte {
   estado                                       String?   @default("Pendiente") @db.VarChar(50)
   notas                                        String?
   nombre_archivo                               String    @db.VarChar(255)
-  mime_type                                    String?   @db.VarChar(150)
-  tamano_bytes                                 Int?
-  archivo_binario                              Bytes?
   ruta                                         String    @db.VarChar(255)
   hash                                         String    @db.VarChar(64)
   fecha_creacion                               DateTime? @default(now()) @db.Timestamp(6)
+  archivo_binario                              Bytes?
+  mime_type                                    String?   @db.VarChar(150)
+  tamano_bytes                                 Int?
   usuario_reporte_usuario_personal_idTousuario usuario   @relation("reporte_usuario_personal_idTousuario", fields: [usuario_personal_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reporte_personal")
   usuario_reporte_usuario_rh_idTousuario       usuario   @relation("reporte_usuario_rh_idTousuario", fields: [usuario_rh_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reporte_rh")
 }
