@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminSidebarSimple from "@/app/components/admin-sidebar-simple";
+import { getPdfViewerUrl } from "@/lib/pdf-viewer";
 
 type HelpDoc = {
   archivo_id: number;
@@ -12,6 +13,7 @@ type HelpDoc = {
   estado: string;
   fechaCreacion: string;
   tamanoBytes: number | null;
+  ruta: string;
 };
 
 type ApiHelpDoc = {
@@ -22,7 +24,9 @@ type ApiHelpDoc = {
   notas?: string | null;
   estado?: string | null;
   fecha_creacion?: string | null;
+  nivel_urgencia?: string | null;
   tamano_bytes?: number | null;
+  ruta?: string | null;
 };
 
 function getFriendlyDocumentName(fileName: string, categoria: string) {
@@ -64,19 +68,6 @@ function statusColor(estado: string) {
   return "#0f4c81";
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer) {
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  return btoa(binary);
-}
-
 export default function ContenidoAyudaAdminPage() {
   const [rhId, setRhId] = useState<number | null>(null);
   const [docs, setDocs] = useState<HelpDoc[]>([]);
@@ -98,12 +89,28 @@ export default function ContenidoAyudaAdminPage() {
     return match ? decodeURIComponent(match[1]) : null;
   };
 
+  const localPreviewUrl = useMemo(() => {
+    if (!file) return "";
+    if (file.type !== "application/pdf") return "";
+    return URL.createObjectURL(file);
+  }, [file]);
+
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+    };
+  }, [localPreviewUrl]);
+
   const loadDocs = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       params.set("scope", "admin");
       if (searchQ.trim()) params.set("q", searchQ.trim());
-      const res = await fetch(`/api/contenido-ayuda?${params.toString()}`, { cache: "no-store" });
+
+      const res = await fetch(`/api/contenido-ayuda?${params.toString()}`, {
+        cache: "no-store",
+      });
+
       const contenidos = (await res.json()) as ApiHelpDoc[];
       if (!Array.isArray(contenidos)) throw new Error("Datos inválidos");
 
@@ -116,9 +123,13 @@ export default function ContenidoAyudaAdminPage() {
         estado: r.estado ?? "Publicado",
         fechaCreacion: r.fecha_creacion ?? "",
         tamanoBytes: r.tamano_bytes ?? null,
+        ruta: r.ruta ?? "",
       }));
+
       setDocs(mapped);
-      setSelectedIds((prev) => prev.filter((id) => mapped.some((doc) => doc.archivo_id === id)));
+      setSelectedIds((prev) =>
+        prev.filter((id) => mapped.some((doc) => doc.archivo_id === id))
+      );
     } catch (e) {
       console.error(e);
       setError("Error cargando contenido");
@@ -135,7 +146,9 @@ export default function ContenidoAyudaAdminPage() {
 
   const toggleSelectAllVisible = () => {
     const visibleIds = docs.map((doc) => doc.archivo_id);
-    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
     if (allSelected) {
       setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
       return;
@@ -183,6 +196,7 @@ export default function ContenidoAyudaAdminPage() {
   const loadRhFromCookie = useCallback(() => {
     const raw = readCookie("usuario_public");
     if (!raw) return;
+
     try {
       const parsed = JSON.parse(raw);
       if (parsed?.id) setRhId(parsed.id);
@@ -196,6 +210,7 @@ export default function ContenidoAyudaAdminPage() {
       await loadDocs();
       setLoading(false);
     };
+
     void init();
   }, [loadDocs, loadRhFromCookie]);
 
@@ -204,42 +219,52 @@ export default function ContenidoAyudaAdminPage() {
   }, [loadDocs, loading]);
 
   const handleUpload = async () => {
-    if (!file) return setError("Selecciona un archivo");
-    if (!rhId) return setError("Sesión inválida");
+    if (!file) {
+      setError("Selecciona un archivo");
+      return;
+    }
+
+    if (file.type !== "application/pdf") {
+      setError("Solo se permiten archivos PDF");
+      return;
+    }
+
+    if (!rhId) {
+      setError("Sesión inválida");
+      return;
+    }
 
     setUploading(true);
     setError(null);
 
     try {
-      const fileBuffer = await file.arrayBuffer();
-      if (fileBuffer.byteLength <= 0) {
-        throw new Error(`No se pudo leer el archivo seleccionado. Nombre: ${file.name}, tipo: ${file.type || "sin tipo"}, tamano detectado: ${file.size}.`);
+      if (file.size <= 0) {
+        throw new Error("El archivo seleccionado está vacío");
       }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("rh_id", String(rhId));
+      formData.append("personal_id", String(rhId));
+      formData.append("nivel_urgencia", "Baja");
+      formData.append("tipo_seguimiento", categoria);
+      formData.append("estado", "Publicado");
+      formData.append("notas", descripcion);
 
       const res = await fetch("/api/contenido-ayuda", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rh_id: rhId,
-          tipo_seguimiento: categoria,
-          estado: "Publicado",
-          notas: descripcion,
-          fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
-          fileBase64: arrayBufferToBase64(fileBuffer),
-        }),
+        body: formData,
       });
 
+      const body = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        const debug = body?.debug
-          ? ` Archivo: ${body.debug.fileName || "sin nombre"}, tipo: ${body.debug.fileType || "sin tipo"}, tamano reportado: ${body.debug.reportedSize}, tamano leido: ${body.debug.bufferSize}.`
-          : "";
-        throw new Error((body?.error || "Error al subir archivo") + debug);
+        throw new Error(body?.error || "Error al subir archivo");
       }
 
       setFile(null);
       setDescripcion("");
+      setCategoria("Guía emocional");
       setShowUploadForm(false);
       await loadDocs();
     } catch (e) {
@@ -252,57 +277,131 @@ export default function ContenidoAyudaAdminPage() {
   return (
     <div className="dashboard-container">
       <AdminSidebarSimple active="ayuda" />
+
       <main className="dashboard-main">
         <div className="dashboard-header">
           <div className="admin-page-intro">
             <h1>Contenido de Ayuda</h1>
             <p>Material general publicado para todos los usuarios</p>
           </div>
-          <button className="btn-primary" onClick={() => setShowUploadForm(!showUploadForm)}>
+
+          <button
+            className="btn-primary"
+            onClick={() => setShowUploadForm(!showUploadForm)}
+          >
             {showUploadForm ? "Cancelar" : "+ Nuevo contenido"}
           </button>
         </div>
 
-        {error && <div style={{ color: "#DC2626", background: "#FEF2F2", padding: 12, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+        {error && (
+          <div
+            style={{
+              color: "#DC2626",
+              background: "#FEF2F2",
+              padding: 12,
+              borderRadius: 8,
+              marginBottom: 16,
+            }}
+          >
+            {error}
+          </div>
+        )}
 
         {showUploadForm && (
           <div className="card admin-card-section" style={{ marginBottom: 24 }}>
             <h3 style={{ marginTop: 0 }}>Subir contenido de ayuda</h3>
+
             <div className="admin-form-grid">
               <div className="form-group">
-                <label>Archivo (PDF, imagen)</label>
-                <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={e => setFile(e.target.files?.[0] || null)} />
+                <label>Archivo (solo PDF)</label>
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                />
+
                 {file && (
-                  <div style={{ marginTop: 8, fontSize: "0.9rem", color: file.size > 0 ? "var(--neutral-700)" : "#B91C1C" }}>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: "0.9rem",
+                      color: file.size > 0 ? "var(--neutral-700)" : "#B91C1C",
+                    }}
+                  >
                     {file.name} · {formatFileSize(file.size)}
-                    {file.size <= 0 ? " · El archivo seleccionado en tu equipo está vacío" : ""}
+                    {file.size <= 0 ? " · El archivo seleccionado está vacío" : ""}
                   </div>
                 )}
               </div>
+
               <div className="form-group">
                 <label>Categoría de contenido</label>
-                <select value={categoria} onChange={e => setCategoria(e.target.value)}>
+                <select
+                  value={categoria}
+                  onChange={(e) => setCategoria(e.target.value)}
+                >
                   <option value="Guía emocional">Guía emocional</option>
                   <option value="Manejo del estrés">Manejo del estrés</option>
                   <option value="Autocuidado">Autocuidado</option>
                   <option value="Mindfulness">Mindfulness</option>
-                  <option value="Orientación psicológica">Orientación psicológica</option>
+                  <option value="Orientación psicológica">
+                    Orientación psicológica
+                  </option>
                   <option value="Otro">Otro</option>
                 </select>
               </div>
+
               <div className="form-group" style={{ gridColumn: "1/-1" }}>
                 <label>Descripción (opcional)</label>
-                <textarea rows={3} value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Explica brevemente para qué sirve esta guía..." />
+                <textarea
+                  rows={3}
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  placeholder="Explica brevemente para qué sirve esta guía..."
+                />
               </div>
             </div>
-            <div className="admin-actions" style={{ marginTop: 8 }}>
-              <button className="btn-primary" onClick={handleUpload} disabled={uploading}>{uploading ? "Subiendo..." : "Publicar contenido"}</button>
+
+            {localPreviewUrl && (
+              <div style={{ marginTop: 16 }}>
+                <strong style={{ display: "block", marginBottom: 8 }}>
+                  Vista previa antes de publicar
+                </strong>
+                <iframe
+                  src={localPreviewUrl}
+                  title="Vista previa local del PDF"
+                  style={{
+                    width: "100%",
+                    height: 420,
+                    border: "1px solid var(--neutral-200)",
+                    borderRadius: 10,
+                    background: "#fff",
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="admin-actions" style={{ marginTop: 16 }}>
+              <button
+                className="btn-primary"
+                onClick={handleUpload}
+                disabled={uploading}
+              >
+                {uploading ? "Subiendo..." : "Publicar contenido"}
+              </button>
             </div>
           </div>
         )}
 
         <div className="admin-filterbar">
-          <input className="search-input" type="text" placeholder="Buscar guías y contenido..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Buscar guías y contenido..."
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+          />
+
           <button
             type="button"
             className="btn-volver"
@@ -310,10 +409,12 @@ export default function ContenidoAyudaAdminPage() {
             disabled={docs.length === 0}
             style={{ minWidth: 168 }}
           >
-            {docs.length > 0 && docs.every((doc) => selectedIds.includes(doc.archivo_id))
+            {docs.length > 0 &&
+            docs.every((doc) => selectedIds.includes(doc.archivo_id))
               ? "Quitar selección"
               : "Seleccionar visibles"}
           </button>
+
           <button
             type="button"
             className="btn-danger"
@@ -321,20 +422,51 @@ export default function ContenidoAyudaAdminPage() {
             disabled={selectedIds.length === 0 || deleting}
             style={{ minWidth: 200 }}
           >
-            {deleting ? "Eliminando..." : `Eliminar seleccionados (${selectedIds.length})`}
+            {deleting
+              ? "Eliminando..."
+              : `Eliminar seleccionados (${selectedIds.length})`}
           </button>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: "center", padding: 60, color: "var(--neutral-500)" }}>Cargando contenido...</div>
+          <div
+            style={{
+              textAlign: "center",
+              padding: 60,
+              color: "var(--neutral-500)",
+            }}
+          >
+            Cargando contenido...
+          </div>
         ) : docs.length === 0 ? (
           <div className="admin-empty-state">No hay contenido que mostrar</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {docs.map(d => (
-              <div key={d.archivo_id} className="historial-card" style={{ border: "1px solid var(--neutral-300)", borderRadius: 12, overflow: "hidden" }}>
-                <div className="historial-card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px" }}>
-                  <div className="historial-card-left admin-report-meta" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {docs.map((d) => (
+              <div
+                key={d.archivo_id}
+                className="historial-card"
+                style={{
+                  border: "1px solid var(--neutral-300)",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  background: "#fff",
+                }}
+              >
+                <div
+                  className="historial-card-header"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "16px 20px",
+                    gap: 16,
+                  }}
+                >
+                  <div
+                    className="historial-card-left admin-report-meta"
+                    style={{ display: "flex", flexDirection: "column", gap: 2 }}
+                  >
                     <strong style={{ color: "var(--neutral-900)" }}>
                       {getFriendlyDocumentName(d.nombre_archivo, d.categoria)}
                     </strong>
@@ -344,6 +476,7 @@ export default function ContenidoAyudaAdminPage() {
                       {formatDate(d.fechaCreacion)} · {formatFileSize(d.tamanoBytes)}
                     </span>
                   </div>
+
                   <div className="help-card-header-actions">
                     <label className="help-select-label">
                       <input
@@ -353,12 +486,79 @@ export default function ContenidoAyudaAdminPage() {
                       />
                       Seleccionar
                     </label>
-                    <div className="admin-status-badge" style={{ background: statusColor(d.estado) }}>{d.estado}</div>
+
+                    <div
+                      className="admin-status-badge"
+                      style={{ background: statusColor(d.estado) }}
+                    >
+                      {d.estado}
+                    </div>
                   </div>
                 </div>
-                <div className="admin-actions help-card-actions" style={{ padding: "12px 20px", borderTop: "1px solid var(--neutral-200)" }}>
-                  <a className="btn-primary" href={`/api/contenido-ayuda/${d.hash}/preview`} target="_blank" rel="noreferrer" style={{ textDecoration: "none", textAlign: "center", fontSize: "0.85rem" }}>Ver</a>
-                  <a className="btn-volver" href={`/api/contenido-ayuda/${d.hash}/download`} style={{ textDecoration: "none", textAlign: "center", fontSize: "0.85rem" }}>Descargar</a>
+
+                {d.ruta ? (
+                  <div style={{ padding: "0 20px 16px 20px" }}>
+                    <iframe
+                      src={getPdfViewerUrl(d.ruta)}
+                      title={d.nombre_archivo}
+                      style={{
+                        width: "100%",
+                        height: 420,
+                        border: "1px solid var(--neutral-200)",
+                        borderRadius: 10,
+                        background: "#fff",
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      padding: "0 20px 16px 20px",
+                      color: "#B91C1C",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    Este contenido no tiene URL disponible.
+                  </div>
+                )}
+
+                <div
+                  className="admin-actions help-card-actions"
+                  style={{
+                    padding: "12px 20px",
+                    borderTop: "1px solid var(--neutral-200)",
+                  }}
+                >
+                  <a
+                    className="btn-primary"
+                    href={d.ruta}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      textDecoration: "none",
+                      textAlign: "center",
+                      fontSize: "0.85rem",
+                      pointerEvents: d.ruta ? "auto" : "none",
+                      opacity: d.ruta ? 1 : 0.5,
+                    }}
+                  >
+                    Ver
+                  </a>
+
+                  <a
+                    className="btn-volver"
+                    href={d.ruta}
+                    download
+                    style={{
+                      textDecoration: "none",
+                      textAlign: "center",
+                      fontSize: "0.85rem",
+                      pointerEvents: d.ruta ? "auto" : "none",
+                      opacity: d.ruta ? 1 : 0.5,
+                    }}
+                  >
+                    Descargar
+                  </a>
                 </div>
               </div>
             ))}
