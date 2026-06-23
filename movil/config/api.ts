@@ -1,5 +1,5 @@
-const LOCAL_IP = "192.168.1.95";
+const LOCAL_IP = "10.13.12.30";
 
 export const API_URL = __DEV__
   ? `http://${LOCAL_IP}:3000`
-  : "https://tu-backend-produccion.com";
+  : "https://jorima-eight.vercel.app";

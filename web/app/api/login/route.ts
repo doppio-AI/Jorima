@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { getKeys } from "@/lib/rsa";
 
-const N8N_2FA_WEBHOOK = "https://159.65.111.84.sslip.io/webhook/Jorima-2FA";
+const N8N_2FA_WEBHOOK = process.env.N8N_2FA_WEBHOOK;
 
 export async function POST(request: Request) {
   try {
@@ -69,12 +69,12 @@ export async function POST(request: Request) {
       where: { correo }
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Usuario no encontrado" },
-        { status: 404 }
-      );
-    }
+if (!user) {
+  return NextResponse.json(
+    { error: "Credenciales inválidas" },
+    { status: 401 }
+  );
+}
 
     const validPassword = await bcrypt.compare(contrasena, user.contrasena);
 
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     }
 
     /* ── 4. Lógica de 2FA ── */
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+   const codigo = crypto.randomInt(100000, 1000000).toString();
     const fechaExpiracion = new Date(Date.now() + 5 * 60 * 1000);
 
     // Transacción de Prisma: Invalidar viejos y crear el nuevo
