@@ -2,6 +2,10 @@ import path from "path";
 import { promises as fs } from "fs";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  extractLegacyFileFromNotas,
+  hasHelpContentBinarySupport,
+} from "@/lib/help-content-schema";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
@@ -41,24 +45,61 @@ async function resolveFilePath(hash: string) {
 }
 
 async function resolveStoredContent(hash: string) {
-  const content = await prisma.reporte.findFirst({
+  const hasBinarySupport = await hasHelpContentBinarySupport();
+
+  if (hasBinarySupport) {
+    const content = await prisma.reporte.findFirst({
+      where: { hash },
+      select: {
+        nombre_archivo: true,
+        mime_type: true,
+        archivo_binario: true,
+      },
+    });
+
+    if (!content?.archivo_binario) {
+      return null;
+    }
+
+    return {
+      fileName: content.nombre_archivo,
+      mimeType: content.mime_type || getMimeType(content.nombre_archivo),
+      fileBuffer: content.archivo_binario,
+    };
+  }
+
+  const legacy = await prisma.reporte.findFirst({
     where: { hash },
     select: {
       nombre_archivo: true,
-      mime_type: true,
-      archivo_binario: true,
+      notas: true,
     },
   });
 
-  if (!content?.archivo_binario) {
+  const legacyFile = extractLegacyFileFromNotas(legacy?.notas);
+  if (!legacy || !legacyFile) {
     return null;
   }
 
   return {
-    fileName: content.nombre_archivo,
-    mimeType: content.mime_type || getMimeType(content.nombre_archivo),
-    fileBuffer: content.archivo_binario,
+    fileName: legacy.nombre_archivo,
+    mimeType: legacyFile.mimeType || getMimeType(legacy.nombre_archivo),
+    fileBuffer: legacyFile.buffer,
   };
+}
+
+async function resolveRemoteUrl(hash: string) {
+  const content = await prisma.reporte.findFirst({
+    where: { hash },
+    select: { ruta: true },
+  });
+
+  const ruta = content?.ruta || "";
+  if (ruta.startsWith("http://") || ruta.startsWith("https://")) {
+    return ruta;
+  }
+
+  return null;
 }
 
 export async function GET(
@@ -76,6 +117,11 @@ export async function GET(
           "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(storedContent.fileName)}`,
         },
       });
+    }
+
+    const remoteUrl = await resolveRemoteUrl(hash);
+    if (remoteUrl) {
+      return NextResponse.redirect(remoteUrl);
     }
 
     const file = await resolveFilePath(hash);
