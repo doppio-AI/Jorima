@@ -12,7 +12,7 @@ export async function GET(
     const id = Number(edificio);
 
     // 🔒 Validación
-    if (!id || isNaN(id)) {
+    if (!id || Number.isNaN(id)) {
       return NextResponse.json(
         { error: "ID de edificio inválido" },
         { status: 400 }

@@ -36,7 +36,8 @@ function getFriendlyDocumentName(fileName: string, categoria: string) {
   const hashLike = /^[a-f0-9]{40,}(\.[a-z0-9]+)?$/i.test(trimmed);
   if (!hashLike) return trimmed;
 
-  const extMatch = trimmed.match(/\.([a-z0-9]+)$/i);
+  const regex = /\.([a-z0-9]+)$/i;
+  const extMatch = regex.exec(trimmed);
   const ext = extMatch ? extMatch[1].toUpperCase() : "DOC";
   return `Guia de ${categoria} (${ext})`;
 }
@@ -85,9 +86,11 @@ export default function ContenidoAyudaAdminPage() {
   const [showUploadForm, setShowUploadForm] = useState(false);
 
   const readCookie = (name: string) => {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    return match ? decodeURIComponent(match[1]) : null;
-  };
+  const regex = new RegExp(`(?:^|; )${name}=([^;]*)`);
+  const match = regex.exec(document.cookie);
+
+  return match ? match[1] : null;
+};
 
   const localPreviewUrl = useMemo(() => {
     if (!file) return "";
@@ -127,14 +130,12 @@ export default function ContenidoAyudaAdminPage() {
       }));
 
       setDocs(mapped);
-      setSelectedIds((prev) =>
-        prev.filter((id) => mapped.some((doc) => doc.archivo_id === id))
-      );
-    } catch (e) {
-      console.error(e);
-      setError("Error cargando contenido");
-    }
-  }, [searchQ]);
+
+const validIds = new Set(mapped.map(doc => doc.archivo_id));
+
+setSelectedIds(prev =>
+  prev.filter(id => validIds.has(id))
+);
 
   const toggleSelection = (archivoId: number) => {
     setSelectedIds((prev) =>
@@ -313,7 +314,7 @@ export default function ContenidoAyudaAdminPage() {
 
             <div className="admin-form-grid">
               <div className="form-group">
-                <label>Archivo (solo PDF)</label>
+                <label> <input type="text" />Archivo (solo PDF)</label>
                 <input
                   type="file"
                   accept=".pdf,application/pdf"
@@ -335,7 +336,7 @@ export default function ContenidoAyudaAdminPage() {
               </div>
 
               <div className="form-group">
-                <label>Categoría de contenido</label>
+                <label><input type = "text"/>Categoría de contenido</label>
                 <select
                   value={categoria}
                   onChange={(e) => setCategoria(e.target.value)}
@@ -352,7 +353,7 @@ export default function ContenidoAyudaAdminPage() {
               </div>
 
               <div className="form-group" style={{ gridColumn: "1/-1" }}>
-                <label>Descripción (opcional)</label>
+                <label><input type="text" />Descripción (opcional)</label>
                 <textarea
                   rows={3}
                   value={descripcion}
@@ -482,8 +483,7 @@ export default function ContenidoAyudaAdminPage() {
                       <input
                         type="checkbox"
                         checked={selectedIds.includes(d.archivo_id)}
-                        onChange={() => toggleSelection(d.archivo_id)}
-                      />
+                        onChange={() => toggleSelection(d.archivo_id)}/>
                       Seleccionar
                     </label>
 

@@ -40,26 +40,29 @@ export default function Sidebar({ active }: SidebarProps) {
         </div>
 
         <nav>
-          <a className={linkClass("inicio")} onClick={() => router.push("/usuarios")}>
-            <FiHome size={20} />
-            Inicio
-          </a>
-          <a className={linkClass("historial")} onClick={() => router.push("/historial")}>
+          <button
+  type="button"
+  className={linkClass("inicio")}
+  onClick={() => router.push("/usuarios")}
+>
+  Inicio
+</button>
+          <button className={linkClass("historial")} onClick={() => router.push("/historial")}>
             <FiClock size={20} />
             Mi Historial
-          </a>
-          <a className={linkClass("recursos")} onClick={() => router.push("/recursos")}>
+          </button>
+          <button className={linkClass("recursos")} onClick={() => router.push("/recursos")}>
             <FiBookOpen size={20} />
             Recursos de Ayuda
-          </a>
+          </button>
         </nav>
       </div>
 
       <div>
-        <a className={linkClass("perfil")} onClick={() => router.push("/perfil")}>
+        <button className={linkClass("perfil")} onClick={() => router.push("/perfil")}>
           <FiUser size={20} />
           Mi Perfil
-        </a>
+        </button>
         <div className="logout" onClick={logout}>
           <FiLogOut size={20} />
           Cerrar Sesión

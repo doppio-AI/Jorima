@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 const getId = (id: string) => {
   const num = Number(id);
-  return isNaN(num) ? null : num;
+  return Number.isNaN(num) ? null : num;
 };
 
 // =====================================================

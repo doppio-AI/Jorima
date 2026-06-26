@@ -260,8 +260,8 @@ export default function AdminUsuarios() {
 
         {/* --- MODALES Y DRAWERS (Sin cambios mayores, solo correcciones de sintaxis menor) --- */}
         {showForm && (
-          <div className="drawer-overlay" onClick={resetForm}>
-            <div className="drawer" onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="drawer-overlay" onClick={resetForm} aria-label="Cerrar panel">
+            <dialog open className="drawer">
               <div className="drawer-header">
                 <h3>{selectedUser ? "Editar usuario" : "Nuevo usuario"}</h3>
                 <button className="drawer-close" onClick={resetForm}>✕</button>
@@ -269,7 +269,7 @@ export default function AdminUsuarios() {
 
               <div className="drawer-body">
                 <div className="form-group">
-                  <label>Nombre</label>
+                  <label><input type="text" />Nombre</label>
                   <input
                     type="text"
                     value={form.nombre}
@@ -279,7 +279,7 @@ export default function AdminUsuarios() {
                 </div>
 
                 <div className="form-group">
-                  <label>Correo</label>
+                  <label><input type="text" />Correo</label>
                   <input
                     type="email"
                     value={form.correo}
@@ -289,7 +289,7 @@ export default function AdminUsuarios() {
                 </div>
 
                 <div className="form-group">
-                  <label>Contraseña {selectedUser && "(dejar vacío para no cambiar)"}</label>
+                  <label><input type="text" />Contraseña {selectedUser && "(dejar vacío para no cambiar)"}</label>
                   <input
                     type="password"
                     value={form.contrasena}
@@ -299,7 +299,7 @@ export default function AdminUsuarios() {
                 </div>
 
                 <div className="form-group">
-                  <label>Rol</label>
+                  <label><input type="text" />Rol</label>
                   <select
                     value={form.rol}
                     onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as "usuario" | "admin" }))}
@@ -310,7 +310,7 @@ export default function AdminUsuarios() {
                 </div>
 
                 <div className="form-group">
-                  <label>Edificio ID</label>
+                  <label><input type="text" />Edificio ID</label>
                   <input
                     type="number"
                     value={form.edificio_id}
@@ -320,7 +320,7 @@ export default function AdminUsuarios() {
                 </div>
 
                 <div className="form-group">
-                  <label>Turno</label>
+                  <label><input type="text" />Turno</label>
                   <input
                     type="text"
                     value={form.turno}
@@ -335,7 +335,7 @@ export default function AdminUsuarios() {
                 <button className="btn-primary" onClick={handleSave}>Guardar</button>
               </div>
             </div>
-          </div>
+          </button>
         )}
 
         {deleteOpen && (

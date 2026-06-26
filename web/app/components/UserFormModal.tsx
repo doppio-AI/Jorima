@@ -39,7 +39,7 @@ export default function UserFormModal({
         <h3>{user ? "Editar usuario" : "Crear usuario"}</h3>
 
         <div className="form-group">
-          <label>Nombre</label>
+          <label><input type="text" />Nombre</label>
           <input
             type="text"
             placeholder="Nombre completo"
@@ -49,7 +49,7 @@ export default function UserFormModal({
         </div>
 
         <div className="form-group">
-          <label>Correo</label>
+          <label><input type="text" />Correo</label>
           <input
             type="email"
             placeholder="correo@ejemplo.com"
@@ -60,7 +60,7 @@ export default function UserFormModal({
 
         {!user && (
           <div className="form-group">
-            <label>Contraseña</label>
+            <label><input type="text" />Contraseña</label>
             <input
               type="password"
               placeholder="••••••••"
@@ -71,7 +71,7 @@ export default function UserFormModal({
         )}
 
         <div className="form-group">
-          <label>Rol</label>
+          <label><input type="text" />Rol</label>
           <select
             value={form.rol}
             onChange={(e) => setForm((prev) => ({ ...prev, rol: e.target.value }))}

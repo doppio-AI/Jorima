@@ -11,13 +11,13 @@ const MoodSelector: React.FC<MoodSelectorProps> = ({ selectedMood, onSelect }) =
   return (
     <div className="mood-selector">
       {moods.map((mood) => (
-        <div
+        <button
           key={mood}
           className={`mood-option ${selectedMood === mood ? "selected" : ""}`}
           onClick={() => onSelect(mood)}
         >
           {mood}
-        </div>
+        </button>
       ))}
     </div>
   );
