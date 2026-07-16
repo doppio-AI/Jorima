@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@lineiconshq/free-icons": "^1.0.4",
     "@lineiconshq/react-lineicons": "^1.0.5",
     "@prisma/client": "^6.19.2",

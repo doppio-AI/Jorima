@@ -4,11 +4,22 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { getKeys } from "@/lib/rsa";
 
-const N8N_2FA_WEBHOOK = "https://159.65.111.84.sslip.io/webhook/Jorima-2FA";
+export const runtime = "nodejs";
+
+interface LoginPayload {
+  encryptedData?: string;
+  encryptedKey?: string;
+  iv?: string;
+}
+
+interface CredencialesDescifradas {
+  correo?: string;
+  contrasena?: string;
+}
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = (await request.json()) as LoginPayload;
     const { encryptedData, encryptedKey, iv } = body;
 
     if (!encryptedData || !encryptedKey || !iv) {
@@ -18,65 +29,125 @@ export async function POST(request: Request) {
       );
     }
 
-/* ── 1. Descifrar llave AES con RSA ── */
+    /* ── 1. Descifrar la llave AES con RSA ── */
+
     const { privateKey } = getKeys();
 
-    const decryptedKeyBuffer = crypto.privateDecrypt(
-      {
-        key: privateKey,
-        padding: crypto.constants.RSA_PKCS1_PADDING
-      },
-      Buffer.from(encryptedKey, "base64")
-    );
+    let decryptedKeyBuffer: Buffer;
 
-    // --- DEBUG: Esto te dirá qué está llegando ---
-    const llaveEnTexto = decryptedKeyBuffer.toString();
-    console.log("CONTENIDO DE LA LLAVE DESCIFRADA:", llaveEnTexto);
-    console.log("TAMAÑO ORIGINAL:", decryptedKeyBuffer.length);
+    try {
+      decryptedKeyBuffer = crypto.privateDecrypt(
+        {
+          key: privateKey,
+          padding: crypto.constants.RSA_PKCS1_PADDING,
+        },
+        Buffer.from(encryptedKey, "base64")
+      );
+    } catch (error) {
+      console.error("No se pudo descifrar la llave AES:", error);
 
-    let aesKey: Buffer;
-
-    // Caso A: El frontend mandó un Hexadecimal de 64 caracteres
-    if (decryptedKeyBuffer.length === 64) {
-      aesKey = Buffer.from(llaveEnTexto, "hex");
-    } 
-    // Caso B: El frontend mandó la llave correcta de 32 bytes
-    else if (decryptedKeyBuffer.length === 32) {
-      aesKey = decryptedKeyBuffer;
-    }
-    // Caso C: Algo salió mal y llegó algo de otro tamaño (como tus 6 bytes)
-    else {
-      console.error(`ERROR: Tamaño inesperado (${decryptedKeyBuffer.length} bytes).`);
-      // Intentamos rellenar con ceros solo para que el código no crashee y puedas ver el log
-      aesKey = Buffer.alloc(32);
-      decryptedKeyBuffer.copy(aesKey); 
-    }
-
-    /* ── 2. Descifrar los datos con AES-256-CBC ── */
-    const decipher = crypto.createDecipheriv(
-      "aes-256-cbc",
-      aesKey,
-      Buffer.from(iv, "base64")
-    );
-
-    let decrypted = decipher.update(encryptedData, "base64", "utf8");
-    decrypted += decipher.final("utf8");
-
-    const { correo, contrasena } = JSON.parse(decrypted);
-
-    /* ── 3. Validar usuario en BD ── */
-    const user = await prisma.usuario.findUnique({
-      where: { correo }
-    });
-
-    if (!user) {
       return NextResponse.json(
-        { error: "Usuario no encontrado" },
-        { status: 404 }
+        { error: "Solicitud de inicio de sesión inválida" },
+        { status: 400 }
       );
     }
 
-    const validPassword = await bcrypt.compare(contrasena, user.contrasena);
+    let aesKey: Buffer;
+
+    /*
+     * El frontend puede mandar:
+     * - La llave AES directamente como 32 bytes.
+     * - La llave AES como texto hexadecimal de 64 caracteres.
+     */
+    if (decryptedKeyBuffer.length === 32) {
+      aesKey = decryptedKeyBuffer;
+    } else {
+      const keyAsText = decryptedKeyBuffer.toString("utf8");
+
+      if (
+        keyAsText.length === 64 &&
+        /^[0-9a-fA-F]{64}$/.test(keyAsText)
+      ) {
+        aesKey = Buffer.from(keyAsText, "hex");
+      } else {
+        return NextResponse.json(
+          { error: "Llave de cifrado inválida" },
+          { status: 400 }
+        );
+      }
+    }
+
+    /* ── 2. Descifrar las credenciales con AES-256-CBC ── */
+
+    const ivBuffer = Buffer.from(iv, "base64");
+
+    if (ivBuffer.length !== 16) {
+      return NextResponse.json(
+        { error: "Vector de inicialización inválido" },
+        { status: 400 }
+      );
+    }
+
+    let credenciales: CredencialesDescifradas;
+
+    try {
+      const decipher = crypto.createDecipheriv(
+        "aes-256-cbc",
+        aesKey,
+        ivBuffer
+      );
+
+      let decrypted = decipher.update(
+        encryptedData,
+        "base64",
+        "utf8"
+      );
+
+      decrypted += decipher.final("utf8");
+
+      credenciales = JSON.parse(
+        decrypted
+      ) as CredencialesDescifradas;
+    } catch (error) {
+      console.error("No se pudieron descifrar las credenciales:", error);
+
+      return NextResponse.json(
+        { error: "Credenciales cifradas inválidas" },
+        { status: 400 }
+      );
+    }
+
+    const correo = credenciales.correo?.trim().toLowerCase();
+    const contrasena = credenciales.contrasena;
+
+    if (!correo || !contrasena) {
+      return NextResponse.json(
+        { error: "Correo y contraseña son obligatorios" },
+        { status: 400 }
+      );
+    }
+
+    /* ── 3. Validar al usuario ── */
+
+    const user = await prisma.usuario.findUnique({
+      where: { correo },
+    });
+
+    /*
+     * Se utiliza el mismo mensaje cuando no existe el usuario
+     * o cuando falla la contraseña para no revelar cuentas registradas.
+     */
+    if (!user) {
+      return NextResponse.json(
+        { error: "Credenciales inválidas" },
+        { status: 401 }
+      );
+    }
+
+    const validPassword = await bcrypt.compare(
+      contrasena,
+      user.contrasena
+    );
 
     if (!validPassword) {
       return NextResponse.json(
@@ -85,61 +156,78 @@ export async function POST(request: Request) {
       );
     }
 
-    /* ── 4. Lógica de 2FA ── */
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-    const fechaExpiracion = new Date(Date.now() + 5 * 60 * 1000);
+    /* ── 4. Crear la sesión directamente, sin 2FA ── */
 
-    // Transacción de Prisma: Invalidar viejos y crear el nuevo
-    await prisma.$transaction([
-      prisma.codigo_verificacion.updateMany({
-        where: { usuario_id: user.usuario_id, usado: false },
-        data: { usado: true },
-      }),
-      prisma.codigo_verificacion.create({
-        data: {
-          usuario_id: user.usuario_id,
-          codigo,
-          fecha_expiracion: fechaExpiracion,
-        },
-      })
-    ]);
-
-    /* ── 5. Enviar a n8n ── */
-    try {
-      // Usamos un timeout para que Vercel no se quede colgado si n8n no responde
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      await fetch(N8N_2FA_WEBHOOK, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          correo: user.correo,
-          codigo,
-          nombre: user.nombre,
-        }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-    } catch (n8nError) {
-      console.error("Error enviando código a n8n:", n8nError);
-      // Opcional: Podrías decidir si dejar pasar al usuario o no si n8n falla.
-      // Aquí devolvemos error porque si no llega el código, el usuario no podrá entrar.
-      return NextResponse.json(
-        { error: "No se pudo enviar el correo de verificación" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      message: "Código enviado a tu correo",
+    const usuarioSesion = {
+      id: user.usuario_id,
       usuario_id: user.usuario_id,
+      tipo_usuario: user.tipo_usuario,
       correo: user.correo,
-    });
+      nombre: user.nombre,
+      apellido_paterno: user.apellido_paterno,
+      apellido_materno: user.apellido_materno,
+      edificio_id: user.edificio_id,
+      turno: user.turno,
+    };
 
+    const usuarioPublico = {
+      id: user.usuario_id,
+      usuario_id: user.usuario_id,
+      tipo_usuario: user.tipo_usuario,
+      correo: user.correo,
+      nombre: user.nombre,
+      apellido_paterno: user.apellido_paterno,
+      apellido_materno: user.apellido_materno,
+      edificio_id: user.edificio_id,
+      turno: user.turno,
+    };
+
+    const response = NextResponse.json(
+      {
+        ok: true,
+        message: "Inicio de sesión exitoso",
+        usuario: usuarioPublico,
+      },
+      { status: 200 }
+    );
+
+    const cookieOptions = {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax" as const,
+      path: "/",
+      maxAge: 60 * 30,
+    };
+
+    /*
+     * Cookie privada para las API.
+     * El chatbot debe obtener el ID del usuario desde esta cookie.
+     */
+    response.cookies.set(
+      "usuario",
+      JSON.stringify(usuarioSesion),
+      {
+        ...cookieOptions,
+        httpOnly: true,
+      }
+    );
+
+    /*
+     * Cookie pública para que el frontend pueda mostrar
+     * nombre, rol u otros datos no sensibles.
+     */
+    response.cookies.set(
+      "usuario_public",
+      JSON.stringify(usuarioPublico),
+      {
+        ...cookieOptions,
+        httpOnly: false,
+      }
+    );
+
+    return response;
   } catch (error) {
     console.error("LOGIN ERROR:", error);
+
     return NextResponse.json(
       { error: "Error interno en el servidor" },
       { status: 500 }
@@ -149,7 +237,10 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   const response = NextResponse.json(
-    { message: "Logout exitoso" },
+    {
+      ok: true,
+      message: "Logout exitoso",
+    },
     { status: 200 }
   );
 
@@ -157,10 +248,19 @@ export async function DELETE() {
     path: "/",
     maxAge: 0,
     expires: new Date(0),
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
   };
 
-  response.cookies.set("usuario", "", { ...cookieOptions, httpOnly: true });
-  response.cookies.set("usuario_public", "", cookieOptions);
+  response.cookies.set("usuario", "", {
+    ...cookieOptions,
+    httpOnly: true,
+  });
+
+  response.cookies.set("usuario_public", "", {
+    ...cookieOptions,
+    httpOnly: false,
+  });
 
   return response;
 }

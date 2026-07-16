@@ -1,39 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-const N8N_WEBHOOK = "https://159.65.111.84.sslip.io/webhook/Jorima-Tech";
+import { getSesionUsuario } from "@/lib/session";
+import { generarRespuestaJorima, type HistorialTurno } from "@/lib/ia/gemini";
+
+const NIVELES_QUE_ALERTAN = new Set(["alto", "crisis"]);
 
 /* ───────────────────────────────────────────
    POST  /api/chat
-   Body: { usuario_id, mensaje, conversacion_id? }
+   Body: { mensaje, conversacion_id? }
+   El usuario_id SIEMPRE sale de la sesión, nunca del body
+   (cierra deuda técnica crítica #6 del README).
    ─────────────────────────────────────────── */
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { usuario_id, mensaje, conversacion_id } = body;
+    const sesion = getSesionUsuario(req);
+    if (!sesion) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+    const usuario_id = sesion.id;
 
-    if (!usuario_id || !mensaje) {
+    const body = await req.json();
+    const { mensaje, conversacion_id } = body;
+
+    if (!mensaje || typeof mensaje !== "string" || !mensaje.trim()) {
       return NextResponse.json(
-        { error: "Faltan campos requeridos" },
+        { error: "Falta el campo mensaje" },
         { status: 400 }
       );
     }
 
-    /* ── Obtener o crear conversación ── */
+    /* ── Obtener o crear conversación (validando que sea del usuario) ── */
 
-    let convId = conversacion_id;
+    let convId: number = conversacion_id;
 
-    if (!convId) {
+    if (convId) {
+      const conv = await prisma.conversacion.findUnique({
+        where: { conversacion_id: Number(convId) },
+        select: { usuario_id: true },
+      });
+      if (!conv || conv.usuario_id !== usuario_id) {
+        return NextResponse.json(
+          { error: "Conversación no encontrada" },
+          { status: 404 }
+        );
+      }
+    } else {
       const nueva = await prisma.conversacion.create({
         data: {
-          usuario_id: Number(usuario_id),
+          usuario_id,
           titulo: mensaje.substring(0, 100),
         },
       });
       convId = nueva.conversacion_id;
     }
 
-    /* ── Guardar mensaje del usuario ── */
+    /* ── Guardar mensaje del usuario (aún sin metadatos) ── */
 
     await prisma.mensaje.create({
       data: {
@@ -45,55 +67,64 @@ export async function POST(req: NextRequest) {
 
     /* ── Obtener historial para contexto ── */
 
-    const historial = await prisma.mensaje.findMany({
+    const historialBD = await prisma.mensaje.findMany({
       where: { conversacion_id: convId },
       orderBy: { fecha: "asc" },
       select: { role: true, texto: true },
     });
 
-    /* ── Enviar al webhook de n8n ── */
+    // El último elemento es el mensaje que acabamos de guardar; Gemini lo
+    // recibe por separado en sendMessage, así que se excluye del historial.
+    const historial: HistorialTurno[] = historialBD
+      .slice(0, -1)
+      .map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        texto: m.texto,
+      }));
 
-    const n8nResponse = await fetch(N8N_WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        usuario_id,
-        mensaje,
-        conversacion_id: convId,
-        historial,
-      }),
-    });
+    /* ── Generar respuesta + clasificación con Gemini ── */
 
-    if (!n8nResponse.ok) {
-      throw new Error(`n8n respondió con status ${n8nResponse.status}`);
-    }
+    const clasificacion = await generarRespuestaJorima(mensaje, historial);
+    const esAlerta = NIVELES_QUE_ALERTAN.has(clasificacion.riesgo);
 
-    const n8nData = await n8nResponse.json();
+    /* ── Guardar respuesta del asistente con metadatos ── */
+    /* El mensaje del usuario recibe la clasificación (habla de él), pero  */
+    /* técnicamente Gemini clasifica el turno completo; guardamos los      */
+    /* metadatos en el mensaje del asistente para no reescribir el mensaje */
+    /* del usuario ya persistido.                                          */
 
-    /* ── Extraer respuesta del asistente ── */
-
-    const respuestaAsistente =
-      n8nData.respuesta ||
-      n8nData.output ||
-      n8nData.text ||
-      n8nData.message ||
-      (typeof n8nData === "string" ? n8nData : "Lo siento, no pude procesar tu mensaje.");
-
-    /* ── Guardar respuesta del asistente ── */
-
-    await prisma.mensaje.create({
+    const mensajeAsistente = await prisma.mensaje.create({
       data: {
         conversacion_id: convId,
         role: "assistant",
-        texto: respuestaAsistente,
+        texto: clasificacion.respuesta,
+        sentimiento: clasificacion.sentimiento,
+        categoria: clasificacion.categoria,
+        riesgo: clasificacion.riesgo,
+        alerta: esAlerta,
       },
     });
 
-    /* ── Responder al frontend ── */
+    /* ── Si el riesgo lo amerita, crear alerta para el dashboard ── */
+    /* Nunca bloquea ni modifica la respuesta al usuario. */
+
+    if (esAlerta) {
+      await prisma.alerta_riesgo.create({
+        data: {
+          usuario_id,
+          conversacion_id: convId,
+          mensaje_id: mensajeAsistente.mensaje_id,
+          nivel: clasificacion.riesgo,
+          resumen: clasificacion.resumen_riesgo || null,
+        },
+      });
+    }
+
+    /* ── Responder al frontend (sin exponer metadatos de riesgo) ── */
 
     return NextResponse.json({
       conversacion_id: convId,
-      respuesta: respuestaAsistente,
+      respuesta: clasificacion.respuesta,
     });
 
   } catch (error: any) {
@@ -106,26 +137,36 @@ export async function POST(req: NextRequest) {
 }
 
 /* ───────────────────────────────────────────
-   GET  /api/chat?usuario_id=X&conversacion_id=Y
-   Obtiene historial de mensajes
+   GET  /api/chat?conversacion_id=Y
+   Obtiene historial de mensajes. usuario_id sale de la sesión.
    ─────────────────────────────────────────── */
 
 export async function GET(req: NextRequest) {
   try {
+    const sesion = getSesionUsuario(req);
+    if (!sesion) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+    const usuario_id = sesion.id;
+
     const { searchParams } = new URL(req.url);
-    const usuario_id = searchParams.get("usuario_id");
     const conversacion_id = searchParams.get("conversacion_id");
 
-    if (!usuario_id) {
-      return NextResponse.json(
-        { error: "Se requiere usuario_id" },
-        { status: 400 }
-      );
-    }
-
-    /* ── Si piden una conversación específica ── */
+    /* ── Si piden una conversación específica, validar propiedad ── */
 
     if (conversacion_id) {
+      const conv = await prisma.conversacion.findUnique({
+        where: { conversacion_id: Number(conversacion_id) },
+        select: { usuario_id: true },
+      });
+
+      if (!conv || conv.usuario_id !== usuario_id) {
+        return NextResponse.json(
+          { error: "Conversación no encontrada" },
+          { status: 404 }
+        );
+      }
+
       const mensajes = await prisma.mensaje.findMany({
         where: { conversacion_id: Number(conversacion_id) },
         orderBy: { fecha: "asc" },
@@ -134,17 +175,19 @@ export async function GET(req: NextRequest) {
           role: true,
           texto: true,
           fecha: true,
+          // No se exponen sentimiento/categoria/riesgo/alerta al cliente
+          // del empleado: son datos internos para RH/psicología.
         },
       });
 
       return NextResponse.json({ mensajes });
     }
 
-    /* ── Si no, devolver lista de conversaciones ── */
+    /* ── Si no, devolver lista de conversaciones del usuario en sesión ── */
 
     const conversaciones = await prisma.conversacion.findMany({
       where: {
-        usuario_id: Number(usuario_id),
+        usuario_id,
         activa: true,
       },
       orderBy: { fecha_creacion: "desc" },

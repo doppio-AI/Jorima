@@ -21,6 +21,7 @@ model usuario {
   fecha_registro                               DateTime?             @default(now()) @db.Timestamp(6)
   codigo_verificacion                          codigo_verificacion[]
   conversacion                                 conversacion[]
+  alerta_riesgo                                alerta_riesgo[]
   reporte_reporte_usuario_personal_idTousuario reporte[]             @relation("reporte_usuario_personal_idTousuario")
   reporte_reporte_usuario_rh_idTousuario       reporte[]             @relation("reporte_usuario_rh_idTousuario")
   edificio                                     edificio              @relation(fields: [edificio_id], references: [edificio_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuario_edificio")
@@ -46,26 +47,37 @@ model respuesta {
 }
 
 model conversacion {
-  conversacion_id Int       @id @default(autoincrement())
+  conversacion_id Int             @id @default(autoincrement())
   usuario_id      Int
-  titulo          String?   @db.VarChar(200)
-  fecha_creacion  DateTime? @default(now()) @db.Timestamp(6)
-  activa          Boolean   @default(true)
-  usuario         usuario   @relation(fields: [usuario_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
+  titulo          String?         @db.VarChar(200)
+  fecha_creacion  DateTime?       @default(now()) @db.Timestamp(6)
+  activa          Boolean         @default(true)
+  usuario         usuario         @relation(fields: [usuario_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
   mensaje         mensaje[]
+  alerta_riesgo   alerta_riesgo[]
 
   @@index([usuario_id], map: "idx_conversacion_usuario")
 }
 
+/// Taxonomía cerrada de categorías de riesgo psicosocial.
+/// Se mantiene como String (no enum de Prisma) para no requerir migración
+/// destructiva si se amplía la taxonomía más adelante, pero el código de
+/// aplicación (lib/ia/prompt.ts) SIEMPRE debe restringir a estos valores.
 model mensaje {
   mensaje_id      Int          @id @default(autoincrement())
   conversacion_id Int
   role            String       @db.VarChar(20)
   texto           String
+  sentimiento     String?      @db.VarChar(20) // positivo | neutral | negativo
+  categoria       String?      @db.VarChar(50) // ver TAXONOMIA_CATEGORIAS en lib/ia/prompt.ts
+  riesgo          String?      @db.VarChar(20) // bajo | medio | alto | crisis
+  alerta          Boolean      @default(false)
   fecha           DateTime?    @default(now()) @db.Timestamp(6)
   conversacion    conversacion @relation(fields: [conversacion_id], references: [conversacion_id], onDelete: Cascade, onUpdate: NoAction)
+  alerta_riesgo   alerta_riesgo[]
 
   @@index([conversacion_id], map: "idx_mensaje_conversacion")
+  @@index([alerta], map: "idx_mensaje_alerta")
 }
 
 model codigo_verificacion {
@@ -109,4 +121,28 @@ model riesgo_prediccion {
   riesgo_proyeccion_30d Float
   created_at            DateTime? @default(now()) @db.Timestamp(6)
   edificio              edificio  @relation(fields: [edificio_id], references: [edificio_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_riesgo_edificio")
+}
+
+/// Cola de trabajo para el dashboard de administración/psicología.
+/// Se crea SOLO cuando riesgo ∈ {alto, crisis}. Nunca bloquea el chat;
+/// es un mecanismo de aviso paralelo, no un filtro de contenido.
+model alerta_riesgo {
+  alerta_id       Int          @id @default(autoincrement())
+  usuario_id      Int
+  conversacion_id Int
+  mensaje_id      Int
+  nivel           String       @db.VarChar(20) // alto | crisis
+  resumen         String?      // explicación breve generada por el modelo, sin cita textual
+  atendida        Boolean      @default(false)
+  atendida_por    Int?
+  atendida_en     DateTime?    @db.Timestamp(6)
+  notas_admin     String?
+  created_at      DateTime     @default(now()) @db.Timestamp(6)
+
+  usuario         usuario      @relation(fields: [usuario_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
+  conversacion    conversacion @relation(fields: [conversacion_id], references: [conversacion_id], onDelete: Cascade, onUpdate: NoAction)
+  mensaje         mensaje      @relation(fields: [mensaje_id], references: [mensaje_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([atendida, nivel], map: "idx_alerta_pendientes")
+  @@index([usuario_id], map: "idx_alerta_usuario")
 }
