@@ -6,6 +6,7 @@ type Theme = "light" | "dark";
 
 const STORAGE_THEME = "jorima_theme";
 const STORAGE_FONT_SCALE = "jorima_font_scale";
+const STORAGE_COLLAPSED = "jorima_controls_collapsed";
 
 export default function ThemeFontControls() {
   // 1. AÑADIMOS EL ESTADO MOUNTED
@@ -16,11 +17,17 @@ export default function ThemeFontControls() {
     const storedTheme = localStorage.getItem(STORAGE_THEME) as Theme | null;
     return storedTheme === "dark" ? "dark" : "light";
   });
-  
+
   const [fontScale, setFontScale] = useState<number>(() => {
     if (typeof window === "undefined") return 1;
     const storedScale = Number(localStorage.getItem(STORAGE_FONT_SCALE) ?? 1);
     return clamp(storedScale, 0.85, 1.25);
+  });
+
+  // Estado de minimizado, persistido igual que theme/fontScale
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(STORAGE_COLLAPSED) === "1";
   });
 
   const panelStyle = useMemo(
@@ -39,6 +46,29 @@ export default function ThemeFontControls() {
       display: "flex",
       flexDirection: "column" as const,
       gap: 12,
+    }),
+    []
+  );
+
+  // Botón flotante cuando el panel está minimizado
+  const collapsedButtonStyle = useMemo(
+    () => ({
+      position: "fixed" as const,
+      right: 16,
+      bottom: 16,
+      zIndex: 999,
+      width: 44,
+      height: 44,
+      borderRadius: "50%",
+      border: "1px solid var(--neutral-300)",
+      background: "var(--neutral-50)",
+      boxShadow: "var(--shadow-md)",
+      color: "var(--neutral-900)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      fontSize: 18,
     }),
     []
   );
@@ -69,18 +99,58 @@ export default function ThemeFontControls() {
     document.documentElement.style.setProperty("--font-scale", String(nextScale));
   };
 
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(STORAGE_COLLAPSED, next ? "1" : "0");
+      return next;
+    });
+  };
+
   // 3. SI AÚN NO SE HA MONTADO (ESTÁ EN EL SERVIDOR), NO RENDERIZAMOS NADA
   if (!mounted) {
     return null;
   }
 
+  // 4. SI ESTÁ MINIMIZADO, SOLO MOSTRAMOS EL BOTÓN PARA EXPANDIR
+  if (collapsed) {
+    return (
+      <button
+        onClick={toggleCollapsed}
+        style={collapsedButtonStyle}
+        aria-label="Mostrar controles de accesibilidad"
+        title="Mostrar controles de accesibilidad"
+      >
+        ⚙️
+      </button>
+    );
+  }
+
   return (
     <div style={panelStyle}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <strong style={{ fontSize: 13 }}>Accesibilidad</strong>
-        <span style={{ fontSize: 12, color: "var(--neutral-500)" }}>
-          {theme === "dark" ? "Oscuro" : "Claro"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "var(--neutral-500)" }}>
+            {theme === "dark" ? "Oscuro" : "Claro"}
+          </span>
+          <button
+            onClick={toggleCollapsed}
+            aria-label="Minimizar controles"
+            title="Minimizar"
+            style={{
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: 16,
+              lineHeight: 1,
+              padding: 4,
+              color: "var(--neutral-500)",
+            }}
+          >
+            ─
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
