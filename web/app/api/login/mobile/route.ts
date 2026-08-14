@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { createSessionToken } from "@/lib/auth/session";
 
 // Orígenes autorizados para consumir esta API.
 // Puedes agregar más separados por coma en CORS_ALLOWED_ORIGINS.
@@ -31,18 +32,32 @@ function isOriginAllowed(request: Request): boolean {
     return true;
   }
 
-  return getAllowedOrigins().includes(origin);
+  const allowedOrigins = getAllowedOrigins();
+
+  if (allowedOrigins.includes("*")) {
+    return true;
+  }
+
+  return allowedOrigins.includes(origin);
 }
 
 function getCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("origin");
   const allowedOrigins = getAllowedOrigins();
+  const wildcard = allowedOrigins.includes("*");
+
+  // Con wildcard reflejamos el Origin recibido en vez de mandar
+  // el string "*" fijo: así, si algún día se agrega Authorization
+  // + cookies con "credentials: include", el navegador no lo rechaza
+  // (Access-Control-Allow-Origin: * no es compatible con credentials).
+  const allowOriginValue = wildcard
+    ? origin || "*"
+    : origin && allowedOrigins.includes(origin)
+      ? origin
+      : allowedOrigins[0];
 
   return {
-    "Access-Control-Allow-Origin":
-      origin && allowedOrigins.includes(origin)
-        ? origin
-        : allowedOrigins[0],
+    "Access-Control-Allow-Origin": allowOriginValue,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers":
       "Content-Type, Authorization, Accept",
@@ -201,10 +216,22 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * A diferencia de la cookie httpOnly que usa el flujo web,
+     * el cliente móvil no puede depender de cookies persistentes.
+     * Por eso aquí se firma un token de sesión que la app guarda
+     * y reenvía como "Authorization: Bearer <token>".
+     */
+    const token = createSessionToken({
+      usuario_id: user.usuario_id,
+      tipo_usuario: user.tipo_usuario,
+    });
+
     return jsonResponse(
       request,
       {
         message: "Login exitoso",
+        token,
         usuario: {
           id: user.usuario_id,
           nombre: user.nombre,

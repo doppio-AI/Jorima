@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSesionUsuario } from "@/lib/session";
+import { getSessionUser } from "@/lib/auth/session";
+import { isOriginAllowed, getCorsHeaders } from "@/lib/cors";
 import {
   generarRespuestaJorima,
   type HistorialTurno,
@@ -28,6 +29,7 @@ type ChatBody = {
 ─────────────────────────────────────────── */
 
 function respuestaJson(
+  request: Request,
   data: Record<string, unknown>,
   status = 200
 ) {
@@ -35,6 +37,7 @@ function respuestaJson(
     status,
     headers: {
       "Cache-Control": "no-store",
+      ...getCorsHeaders(request),
     },
   });
 }
@@ -61,6 +64,24 @@ function convertirEnteroPositivo(valor: unknown): number | null {
 }
 
 /* ───────────────────────────────────────────
+   OPTIONS /api/chat
+   Preflight de CORS. El navegador lo manda antes
+   del GET/POST real cuando el origen es distinto
+   (p. ej. Expo Web en localhost:8081).
+─────────────────────────────────────────── */
+
+export async function OPTIONS(req: NextRequest) {
+  if (!isOriginAllowed(req)) {
+    return new NextResponse(null, { status: 403 });
+  }
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(req),
+  });
+}
+
+/* ───────────────────────────────────────────
    POST /api/chat
 
    Body:
@@ -69,26 +90,33 @@ function convertirEnteroPositivo(valor: unknown): number | null {
      conversacion_id?: number
    }
 
-   El usuario siempre se obtiene desde la sesión.
+   El usuario siempre se obtiene desde la sesión
+   (cookie en web, Authorization: Bearer <token> en móvil).
 ─────────────────────────────────────────── */
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isOriginAllowed(req)) {
+      return respuestaJson(req, { error: "Origen no autorizado" }, 403);
+    }
+
     /* ── 1. Validar sesión ── */
 
-    const sesion = getSesionUsuario(req);
+    const sesion = getSessionUser(req);
 
     if (!sesion) {
       return respuestaJson(
+        req,
         { error: "No autenticado" },
         401
       );
     }
 
-    const usuarioId = convertirEnteroPositivo(sesion.id);
+    const usuarioId = convertirEnteroPositivo(sesion.usuario_id);
 
     if (!usuarioId) {
       return respuestaJson(
+        req,
         { error: "Sesión inválida" },
         401
       );
@@ -102,6 +130,7 @@ export async function POST(req: NextRequest) {
 
     if (!body) {
       return respuestaJson(
+        req,
         { error: "El cuerpo de la petición no es válido" },
         400
       );
@@ -112,6 +141,7 @@ export async function POST(req: NextRequest) {
       !body.mensaje.trim()
     ) {
       return respuestaJson(
+        req,
         { error: "El mensaje es obligatorio" },
         400
       );
@@ -121,6 +151,7 @@ export async function POST(req: NextRequest) {
 
     if (mensaje.length > MAX_MENSAJE_LENGTH) {
       return respuestaJson(
+        req,
         {
           error: `El mensaje no puede superar los ${MAX_MENSAJE_LENGTH} caracteres`,
         },
@@ -142,6 +173,7 @@ export async function POST(req: NextRequest) {
 
       if (!idRecibido) {
         return respuestaJson(
+          req,
           { error: "El identificador de conversación no es válido" },
           400
         );
@@ -161,6 +193,7 @@ export async function POST(req: NextRequest) {
 
       if (!conversacion) {
         return respuestaJson(
+          req,
           { error: "Conversación no encontrada" },
           404
         );
@@ -276,7 +309,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return respuestaJson({
+      return respuestaJson(req, {
         conversacion_id: conversacionId,
         respuesta: RESPUESTA_CONTINGENCIA,
         temporal: true,
@@ -360,7 +393,7 @@ export async function POST(req: NextRequest) {
 
     /* ── 9. Responder al frontend ── */
 
-    return respuestaJson({
+    return respuestaJson(req, {
       conversacion_id: conversacionId,
       respuesta: clasificacion.respuesta,
     });
@@ -371,6 +404,7 @@ export async function POST(req: NextRequest) {
     );
 
     return respuestaJson(
+      req,
       { error: "Error al procesar el mensaje" },
       500
     );
@@ -389,21 +423,27 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    if (!isOriginAllowed(req)) {
+      return respuestaJson(req, { error: "Origen no autorizado" }, 403);
+    }
+
     /* ── 1. Validar sesión ── */
 
-    const sesion = getSesionUsuario(req);
+    const sesion = getSessionUser(req);
 
     if (!sesion) {
       return respuestaJson(
+        req,
         { error: "No autenticado" },
         401
       );
     }
 
-    const usuarioId = convertirEnteroPositivo(sesion.id);
+    const usuarioId = convertirEnteroPositivo(sesion.usuario_id);
 
     if (!usuarioId) {
       return respuestaJson(
+        req,
         { error: "Sesión inválida" },
         401
       );
@@ -424,6 +464,7 @@ export async function GET(req: NextRequest) {
 
       if (!conversacionId) {
         return respuestaJson(
+          req,
           {
             error:
               "El identificador de conversación no es válido",
@@ -446,6 +487,7 @@ export async function GET(req: NextRequest) {
 
       if (!conversacion) {
         return respuestaJson(
+          req,
           { error: "Conversación no encontrada" },
           404
         );
@@ -467,7 +509,7 @@ export async function GET(req: NextRequest) {
           },
         });
 
-      return respuestaJson({
+      return respuestaJson(req, {
         conversacion_id: conversacionId,
         mensajes,
       });
@@ -492,7 +534,7 @@ export async function GET(req: NextRequest) {
         },
       });
 
-    return respuestaJson({
+    return respuestaJson(req, {
       conversaciones,
     });
   } catch (error: unknown) {
@@ -502,6 +544,7 @@ export async function GET(req: NextRequest) {
     );
 
     return respuestaJson(
+      req,
       { error: "Error al obtener las conversaciones" },
       500
     );

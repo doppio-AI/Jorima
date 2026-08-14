@@ -17,7 +17,6 @@ import ThemedText from "@/components/ThemedText";
 import ThemedButton from "@/components/ThemedButton";
 import { API_URL } from "@/config/api";
 
-
 type Usuario = {
   id?: number;
   nombre?: string;
@@ -28,50 +27,100 @@ type Usuario = {
 };
 
 type Message = {
+  id: string;
   role: "assistant" | "user";
   text: string;
 };
 
-type ChatResponse = {
-  conversacion_id: number;
-  respuestas: string;
+/* ── Coincide con la forma real de /api/chat (POST) ── */
+type ChatPostResponse = {
+  conversacion_id?: number;
+  respuesta?: string;
+  error?: string;
+  temporal?: boolean;
 };
+
+/* ── Coincide con la forma real de /api/chat (GET) ── */
+type ChatGetResponse = {
+  conversacion_id?: number;
+  mensajes?: Array<{
+    mensaje_id: number;
+    role: string;
+    texto: string;
+    fecha: string;
+  }>;
+  error?: string;
+};
+
+const MENSAJE_BIENVENIDA: Message = {
+  id: "bienvenida",
+  role: "assistant",
+  text: "Inicia tu conversación con Jorima, tu asistente de bienestar emocional.",
+};
+
+const MAX_MENSAJE_LENGTH = 2000;
+
+function crearIdMensaje(): string {
+  return `${Date.now()}-${Math.random()}`;
+}
 
 export default function HomeScreen() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
 
   const [mood, setMood] = useState<string | null>(null);
   const [sendingMood, setSendingMood] = useState(false);
   const [moodSaved, setMoodSaved] = useState(false);
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      text: "Inicia tu conversación con Jorima, tu asistente de bienestar emocional.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([MENSAJE_BIENVENIDA]);
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [chatError, setChatError] = useState("");
   const [conversacionId, setConversacionId] = useState<number | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
 
+  /* =========================
+     Sesión cerrada / token inválido
+     Limpia AsyncStorage y manda al login.
+  ========================= */
+  const forzarLogout = async () => {
+    await AsyncStorage.multiRemove(["usuario", "session_token"]);
+    router.replace("/(auth)/login");
+  };
+
+  const authHeaders = (): Record<string, string> =>
+    sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
+
+  /* =========================
+     CARGAR SESIÓN
+  ========================= */
+
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const storedUser = await AsyncStorage.getItem("usuario");
+        const entries = await AsyncStorage.multiGet([
+          "usuario",
+          "session_token",
+        ]);
 
-        if (!storedUser) {
-          router.replace("/(auth)/login");
+        const storedUser = entries.find(([key]) => key === "usuario")?.[1];
+        const storedToken = entries.find(
+          ([key]) => key === "session_token"
+        )?.[1];
+
+        if (!storedUser || !storedToken) {
+          await forzarLogout();
           return;
         }
 
-        const parsedUser = JSON.parse(storedUser);
-        setUsuario(parsedUser);
+        setUsuario(JSON.parse(storedUser));
+        setSessionToken(storedToken);
       } catch (error) {
-        router.replace("/(auth)/login");
+        await forzarLogout();
       } finally {
         setCheckingSession(false);
       }
@@ -79,6 +128,79 @@ export default function HomeScreen() {
 
     loadUser();
   }, []);
+
+  /* =========================
+     CARGAR CONVERSACIÓN GUARDADA
+  ========================= */
+
+  useEffect(() => {
+    if (!usuario?.id || !sessionToken) {
+      return;
+    }
+
+    const cargarConversacion = async () => {
+      const storageKey = `jorima_conversacion_${usuario.id}`;
+      const guardada = await AsyncStorage.getItem(storageKey);
+
+      if (!guardada) {
+        return;
+      }
+
+      const idGuardado = Number(guardada);
+
+      if (!Number.isInteger(idGuardado) || idGuardado <= 0) {
+        await AsyncStorage.removeItem(storageKey);
+        return;
+      }
+
+      setLoadingHistorial(true);
+      setChatError("");
+
+      try {
+        const res = await fetch(
+          `${API_URL}/api/chat?conversacion_id=${idGuardado}`,
+          {
+            method: "GET",
+            headers: { ...authHeaders() },
+          }
+        );
+
+        if (res.status === 401) {
+          await forzarLogout();
+          return;
+        }
+
+        const data = (await res.json()) as ChatGetResponse;
+
+        if (!res.ok) {
+          await AsyncStorage.removeItem(storageKey);
+          setConversacionId(null);
+          setMessages([MENSAJE_BIENVENIDA]);
+          return;
+        }
+
+        const mensajesValidos = (data.mensajes ?? [])
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map<Message>((m) => ({
+            id: String(m.mensaje_id),
+            role: m.role === "assistant" ? "assistant" : "user",
+            text: m.texto,
+          }));
+
+        setConversacionId(idGuardado);
+        setMessages(
+          mensajesValidos.length > 0 ? mensajesValidos : [MENSAJE_BIENVENIDA]
+        );
+      } catch (error) {
+        setChatError("No fue posible recuperar la conversación anterior.");
+      } finally {
+        setLoadingHistorial(false);
+        scrollToBottom();
+      }
+    };
+
+    void cargarConversacion();
+  }, [usuario?.id, sessionToken]);
 
   const getMoodIconName = () => {
     switch (mood) {
@@ -114,6 +236,7 @@ export default function HomeScreen() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...authHeaders(),
         },
         body: JSON.stringify({
           edificio_id: usuario.edificio_id,
@@ -122,6 +245,11 @@ export default function HomeScreen() {
           },
         }),
       });
+
+      if (res.status === 401) {
+        await forzarLogout();
+        return;
+      }
 
       const data = await res.json();
 
@@ -138,90 +266,125 @@ export default function HomeScreen() {
     }
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading || !usuario?.id) return;
+  /* =========================
+     ENVIAR MENSAJE
+  ========================= */
 
+  const sendMessage = async () => {
     const textoUsuario = input.trim();
 
-    setMessages((prev) => [...prev, { role: "user", text: textoUsuario }]);
+    if (!textoUsuario || loading || loadingHistorial || !usuario?.id) {
+      return;
+    }
+
+    if (textoUsuario.length > MAX_MENSAJE_LENGTH) {
+      setChatError(
+        `El mensaje no puede superar los ${MAX_MENSAJE_LENGTH} caracteres.`
+      );
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { id: crearIdMensaje(), role: "user", text: textoUsuario },
+    ]);
     setInput("");
+    setChatError("");
     setLoading(true);
     scrollToBottom();
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
     try {
+      // usuario_id ya NO se manda: /api/chat lo obtiene de la sesión
+      // (cookie en web, Authorization: Bearer <token> en móvil).
       const res = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...authHeaders(),
         },
         body: JSON.stringify({
-          usuario_id: usuario.id,
           mensaje: textoUsuario,
           conversacion_id: conversacionId,
         }),
+        signal: controller.signal,
       });
 
-      const data: ChatResponse | { error?: string } = await res.json();
-
-      if (!res.ok) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            text:
-              "Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.",
-          },
-        ]);
+      if (res.status === 401) {
+        await forzarLogout();
         return;
       }
 
-      const chatData = data as ChatResponse;
+      const data = (await res.json().catch(() => ({}))) as ChatPostResponse;
 
-      if (!conversacionId && chatData.conversacion_id) {
-        setConversacionId(chatData.conversacion_id);
+      if (!res.ok) {
+        throw new Error(data.error || "No fue posible procesar tu mensaje");
+      }
+
+      if (typeof data.respuesta !== "string" || !data.respuesta.trim()) {
+        throw new Error("El asistente devolvió una respuesta inválida");
+      }
+
+      if (
+        typeof data.conversacion_id === "number" &&
+        data.conversacion_id > 0
+      ) {
+        setConversacionId(data.conversacion_id);
+        await AsyncStorage.setItem(
+          `jorima_conversacion_${usuario.id}`,
+          String(data.conversacion_id)
+        );
       }
 
       setMessages((prev) => [
         ...prev,
         {
+          id: crearIdMensaje(),
           role: "assistant",
-          text:
-            chatData.respuestas ||
-            "Lo siento, no pude generar una respuesta en este momento.",
+          text: data.respuesta!.trim(),
         },
       ]);
     } catch (error) {
+      const mensajeError =
+        error instanceof Error
+          ? error.message
+          : "No se pudo conectar con el servidor.";
+
+      setChatError(mensajeError);
+
       setMessages((prev) => [
         ...prev,
         {
+          id: crearIdMensaje(),
           role: "assistant",
-          text: "No se pudo conectar con el servidor. Verifica tu conexión.",
+          text: "Lo siento, ocurrió un problema al procesar tu mensaje. Puedes intentarlo nuevamente.",
         },
       ]);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
       scrollToBottom();
     }
   };
 
   const logout = async () => {
-    try {
-      await AsyncStorage.removeItem("usuario");
-      router.replace("/(auth)/login");
-    } catch (error) {
-      Alert.alert("Error", "No se pudo cerrar la sesión correctamente.");
+    if (usuario?.id) {
+      await AsyncStorage.removeItem(`jorima_conversacion_${usuario.id}`);
     }
+    await forzarLogout();
   };
 
-  const startNewConversation = () => {
+  const startNewConversation = async () => {
     setConversacionId(null);
-    setMessages([
-      {
-        role: "assistant",
-        text: "Inicia tu conversación con Jorima, tu asistente de bienestar emocional.",
-      },
-    ]);
+    setMessages([MENSAJE_BIENVENIDA]);
     setInput("");
+    setChatError("");
+
+    if (usuario?.id) {
+      await AsyncStorage.removeItem(`jorima_conversacion_${usuario.id}`);
+    }
   };
 
   if (checkingSession) {
@@ -339,40 +502,49 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={styles.newChatButton}
-              onPress={startNewConversation}
+              onPress={() => void startNewConversation()}
             >
               <Feather name="edit-3" size={16} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.chatMessages}>
-            {messages.map((msg, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.messageBubble,
-                  msg.role === "assistant"
-                    ? styles.assistantMessage
-                    : styles.userMessage,
-                ]}
-              >
-                {msg.role === "assistant" && (
-                  <MaterialCommunityIcons
-                    name={getMoodIconName() as any}
-                    size={18}
-                    color={COLORS.primary}
-                    style={styles.messageIcon}
-                  />
-                )}
-
-                <ThemedText
-                  variant="bodySmall"
-                  color={msg.role === "user" ? COLORS.white : COLORS.text}
-                >
-                  {msg.text}
+            {loadingHistorial && (
+              <View style={[styles.messageBubble, styles.assistantMessage]}>
+                <ThemedText variant="bodySmall" color={COLORS.textSecondary}>
+                  Cargando conversación...
                 </ThemedText>
               </View>
-            ))}
+            )}
+
+            {!loadingHistorial &&
+              messages.map((msg) => (
+                <View
+                  key={msg.id}
+                  style={[
+                    styles.messageBubble,
+                    msg.role === "assistant"
+                      ? styles.assistantMessage
+                      : styles.userMessage,
+                  ]}
+                >
+                  {msg.role === "assistant" && (
+                    <MaterialCommunityIcons
+                      name={getMoodIconName() as any}
+                      size={18}
+                      color={COLORS.primary}
+                      style={styles.messageIcon}
+                    />
+                  )}
+
+                  <ThemedText
+                    variant="bodySmall"
+                    color={msg.role === "user" ? COLORS.white : COLORS.text}
+                  >
+                    {msg.text}
+                  </ThemedText>
+                </View>
+              ))}
 
             {loading && (
               <View style={[styles.messageBubble, styles.assistantMessage]}>
@@ -389,24 +561,39 @@ export default function HomeScreen() {
             )}
           </View>
 
+          {!!chatError && (
+            <ThemedText
+              variant="caption"
+              color={COLORS.error ?? "#D14343"}
+              style={{ marginTop: 4 }}
+            >
+              {chatError}
+            </ThemedText>
+          )}
+
           <View style={styles.chatInputRow}>
             <TextInput
               style={styles.chatInput}
               placeholder="Escribe tu mensaje aquí..."
               placeholderTextColor={COLORS.textSecondary}
               value={input}
-              onChangeText={setInput}
-              editable={!loading}
+              onChangeText={(text) => {
+                setInput(text);
+                setChatError("");
+              }}
+              maxLength={MAX_MENSAJE_LENGTH}
+              editable={!loading && !loadingHistorial}
               multiline
             />
 
             <TouchableOpacity
               style={[
                 styles.sendButton,
-                (!input.trim() || loading) && styles.sendButtonDisabled,
+                (!input.trim() || loading || loadingHistorial) &&
+                  styles.sendButtonDisabled,
               ]}
-              onPress={sendMessage}
-              disabled={loading || !input.trim()}
+              onPress={() => void sendMessage()}
+              disabled={loading || loadingHistorial || !input.trim()}
             >
               <Feather
                 name={loading ? "loader" : "send"}

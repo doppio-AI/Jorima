@@ -50,7 +50,17 @@ export default function LoginScreen() {
         return;
       }
 
-      await AsyncStorage.setItem("usuario", JSON.stringify(data.usuario));
+      if (typeof data.token !== "string" || !data.token) {
+        setError("No se pudo iniciar sesión. Intenta de nuevo.");
+        return;
+      }
+
+      // Guardamos ambos juntos para no dejar al usuario "logueado"
+      // con solo uno de los dos si algo falla a la mitad.
+      await AsyncStorage.multiSet([
+        ["usuario", JSON.stringify(data.usuario)],
+        ["session_token", data.token],
+      ]);
 
       router.replace("/(tabs)/home");
     } catch (err) {

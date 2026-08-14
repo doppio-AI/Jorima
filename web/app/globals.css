@@ -2053,3 +2053,103 @@ input[type="file"] {
     gap: 6px;
   }
 }
+
+.dashboard-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 24px;
+  background-color: #0F4C81; /* mismo azul que tenía la sidebar */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topbar-logo img {
+  display: block;
+}
+
+.topbar-user {
+  position: relative;
+}
+
+.topbar-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.topbar-user-btn:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+}
+
+.topbar-dropdown {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  min-width: 180px;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #1a1a1a;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+}
+
+.dropdown-item-danger {
+  color: #d64545;
+}
+
+.dashboard-body {
+  display: flex;
+  flex: 1;
+}
+
+.sidebar {
+  width: 240px;
+  background-color: #ffffff; /* antes era azul */
+  border-right: 1px solid #e5e7eb; /* opcional, para separar visualmente */
+  padding: 24px 16px;
+}
+
+.sidebar-link {
+  color: #1a1a1a; /* ajusta el color de texto ya que el fondo cambió a blanco */
+}
+
+.sidebar-link.active,
+.sidebar-link:hover {
+  background-color: #f0f4f8;
+  color: #0F4C81;
+}
